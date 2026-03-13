@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>실시간 주식 대시보드</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --up: #f85149;
+      --down: #388bfd;
+      --flat: #8b949e;
+      --accent: #58a6ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #status {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    #status.connected { background: #3fb950; }
+    #status.error     { background: var(--up); }
+
+    h2 {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 20px 0 8px;
+    }
+
+    /* ── 주식 그리드 ─────────────────── */
+    .stock-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+    }
+
+    .stock-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .stock-name {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .stock-price {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .stock-change {
+      font-size: 0.78rem;
+      margin-top: 4px;
+    }
+
+    .up   { color: var(--up); }
+    .down { color: var(--down); }
+    .flat { color: var(--muted); }
+
+    /* ── 기타 데이터 그리드 ──────────── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .info-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .info-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .info-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .info-sub {
+      font-size: 0.75rem;
+      margin-top: 4px;
+    }
+
+    /* ── 깜빡임 애니메이션 ────────────── */
+    @keyframes flash-up {
+      0%   { background: rgba(248, 81, 73, 0.3); }
+      100% { background: transparent; }
+    }
+    @keyframes flash-down {
+      0%   { background: rgba(56, 139, 253, 0.3); }
+      100% { background: transparent; }
+    }
+
+    .flash-up   { animation: flash-up   0.6s ease-out; }
+    .flash-down { animation: flash-down 0.6s ease-out; }
+
+    /* ── 반응형 ─────────────────────── */
+    @media (max-width: 480px) {
+      .stock-grid { grid-template-columns: repeat(2, 1fr); }
+      .info-grid  { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<h1>
+  <span id="status"></span>
+  실시간 주식 대시보드
+</h1>
+
+<div id="market-notice" style="display:none; background:#21262d; border:1px solid #f0883e; border-radius:8px; padding:10px 14px; margin-bottom:14px; color:#f0883e; font-size:0.85rem;"></div>
+
+<!-- 국내주식 섹션 -->
+<h2>국내주식</h2>
+<div class="stock-grid" id="stockGrid">
+  <div class="stock-card" id="stock-005930">
+    <div class="stock-name">삼성전자</div>
+    <div class="stock-price flat">-</div>
+    <div class="stock-change flat">-</div>
+  </div>
+  <div class="stock-card" id="stock-000660">
+    <div class="stock-name">SK하이닉스</div>
+    <div class="stock-price flat">-</div>
+    <div class="stock-change flat">-</div>
+  </div>
+  <div class="stock-card" id="stock-005380">
+    <div class="stock-name">현대차</div>
+    <div class="stock-price flat">-</div>
+    <div class="stock-change flat">-</div>
+  </div>
+</div>
+
+<!-- 미국 ETF 섹션 -->
+<h2>미국 ETF</h2>
+<div class="stock-grid" id="etfGrid">
+  <div class="stock-card" id="etf-QQQ">
+    <div class="stock-name">나스닥100(QQQ)</div>
+    <div class="stock-price flat">-</div>
+    <div class="stock-change flat">-</div>
+  </div>
+  <div class="stock-card" id="etf-SPY">
+    <div class="stock-name">S&amp;P500(SPY)</div>
+    <div class="stock-price flat">-</div>
+    <div class="stock-change flat">-</div>
+  </div>
+  <div class="stock-card" id="etf-DIA">
+    <div class="stock-name">다우존스(DIA)</div>
+    <div class="stock-price flat">-</div>
+    <div class="stock-change flat">-</div>
+  </div>
+</div>
+
+<!-- 원자재 / 환율 섹션 -->
+<h2>원자재 &amp; 환율</h2>
+<div class="info-grid">
+  <div class="info-card" id="card-WTI">
+    <div class="info-label">WTI 원유 (USD/배럴)</div>
+    <div class="info-value flat" id="wti-price">-</div>
+    <div class="info-sub flat"  id="wti-change">-</div>
+  </div>
+  <div class="info-card" id="card-BRENT">
+    <div class="info-label">브렌트 원유 (USD/배럴)</div>
+    <div class="info-value flat" id="brent-price">-</div>
+    <div class="info-sub flat"  id="brent-change">-</div>
+  </div>
+  <div class="info-card" id="card-USDKRW">
+    <div class="info-label">원/달러 환율</div>
+    <div class="info-value flat" id="fx-price">-</div>
+    <div class="info-sub flat"  id="fx-change">-</div>
+  </div>
+</div>
+
+<!-- 야간선물 섹션 -->
+<h2>야간선물</h2>
+<div class="info-grid">
+  <div class="info-card" id="card-KOSPI_NIGHT">
+    <div class="info-label">코스피 야간선물</div>
+    <div class="info-value flat" id="fut-price">-</div>
+    <div class="info-sub flat"  id="fut-change">-</div>
+  </div>
+</div>
+
+<script>
+  const WS_URL = (() => {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${location.host}`;
+  })();
+
+  const statusEl = document.getElementById('status');
+
+  // ── 숫자 포맷 ────────────────────────────────────────────────────────────
+  const fmtKRW    = n => n == null ? '-' : n.toLocaleString('ko-KR') + '원';
+  const fmtUSD    = n => n == null ? '-' : '$' + n.toFixed(2);
+  const fmtFX     = n => n == null ? '-' : n.toLocaleString('ko-KR', { minimumFractionDigits: 2 }) + '원';
+  const fmtChange = (c, r, dir) => {
+    if (c == null) return '-';
+    const sign = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
+    return `${sign} ${Math.abs(c).toLocaleString('ko-KR')} (${Math.abs(r).toFixed(2)}%)`;
+  };
+  const fmtChangeUSD = (c, r, dir) => {
+    if (c == null) return '-';
+    const sign = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
+    return `${sign} ${Math.abs(c).toFixed(2)} (${Math.abs(r).toFixed(2)}%)`;
+  };
+
+  // ── DOM 업데이트 헬퍼 ────────────────────────────────────────────────────
+  function flashEl(el, dir) {
+    el.classList.remove('flash-up', 'flash-down');
+    void el.offsetWidth; // reflow
+    if (dir === 'up')   el.classList.add('flash-up');
+    if (dir === 'down') el.classList.add('flash-down');
+  }
+
+  function setClass(el, dir) {
+    el.className = el.className.replace(/\b(up|down|flat)\b/g, '').trim();
+    el.classList.add(dir === 'up' ? 'up' : dir === 'down' ? 'down' : 'flat');
+  }
+
+  // ── 국내주식 업데이트 ────────────────────────────────────────────────────
+  function updateStock({ code, price, change, changeRate, dir }) {
+    const card = document.getElementById(`stock-${code}`);
+    if (!card) return;
+    const priceEl  = card.querySelector('.stock-price');
+    const changeEl = card.querySelector('.stock-change');
+
+    priceEl.textContent  = fmtKRW(price);
+    changeEl.textContent = fmtChange(change, changeRate, dir);
+    setClass(priceEl, dir);
+    setClass(changeEl, dir);
+    flashEl(card, dir);
+  }
+
+  // ── 미국 ETF 업데이트 ────────────────────────────────────────────────────
+  function updateUsEtf({ symbol, price, change, changeRate, dir }) {
+    const card = document.getElementById(`etf-${symbol}`);
+    if (!card) return;
+    const priceEl  = card.querySelector('.stock-price');
+    const changeEl = card.querySelector('.stock-change');
+
+    priceEl.textContent  = fmtUSD(price);
+    changeEl.textContent = fmtChangeUSD(change, changeRate, dir);
+    setClass(priceEl, dir);
+    setClass(changeEl, dir);
+    flashEl(card, dir);
+  }
+
+  // ── 원자재 업데이트 ──────────────────────────────────────────────────────
+  function updateCommodity({ symbol, price, change, changeRate, dir }) {
+    const s = symbol === 'WTI' ? 'wti' : 'brent';
+    const priceEl  = document.getElementById(`${s}-price`);
+    const changeEl = document.getElementById(`${s}-change`);
+    const card     = document.getElementById(`card-${symbol}`);
+    if (!priceEl) return;
+    priceEl.textContent  = fmtUSD(price);
+    changeEl.textContent = fmtChangeUSD(change, changeRate, dir);
+    setClass(priceEl, dir);
+    setClass(changeEl, dir);
+    flashEl(card, dir);
+  }
+
+  // ── 환율 업데이트 ────────────────────────────────────────────────────────
+  function updateForex({ rate, change, changeRate, dir }) {
+    const priceEl  = document.getElementById('fx-price');
+    const changeEl = document.getElementById('fx-change');
+    const card     = document.getElementById('card-USDKRW');
+    priceEl.textContent  = fmtFX(rate);
+    changeEl.textContent = fmtChange(change, changeRate, dir);
+    setClass(priceEl, dir);
+    setClass(changeEl, dir);
+    flashEl(card, dir);
+  }
+
+  // ── 야간선물 업데이트 ─────────────────────────────────────────────────────
+  function updateFutures({ price, change, changeRate, dir }) {
+    const priceEl  = document.getElementById('fut-price');
+    const changeEl = document.getElementById('fut-change');
+    const card     = document.getElementById('card-KOSPI_NIGHT');
+    priceEl.textContent  = price == null ? '-' : price.toFixed(2);
+    changeEl.textContent = fmtChangeUSD(change, changeRate, dir);
+    setClass(priceEl, dir);
+    setClass(changeEl, dir);
+    flashEl(card, dir);
+  }
+
+  // ── 초기 상태 렌더 ───────────────────────────────────────────────────────
+  function applyInit(state) {
+    if (state.stocks) {
+      Object.values(state.stocks).forEach(s => {
+        if (s.price != null) updateStock({ ...s, dir: s.sign === '2' || s.sign === '1' ? 'up' : s.sign === '5' || s.sign === '4' ? 'down' : 'flat' });
+      });
+    }
+    if (state.usEtfs) {
+      Object.values(state.usEtfs).forEach(e => {
+        if (e.price != null) {
+          const dir = e.change == null ? 'flat' : e.change > 0 ? 'up' : e.change < 0 ? 'down' : 'flat';
+          updateUsEtf({ ...e, dir });
+        }
+      });
+    }
+    if (state.forex?.USDKRW?.rate != null) updateForex({ ...state.forex.USDKRW, dir: 'flat' });
+    if (state.commodities?.WTI?.price != null) updateCommodity({ symbol: 'WTI', ...state.commodities.WTI, dir: 'flat' });
+    if (state.commodities?.BRENT?.price != null) updateCommodity({ symbol: 'BRENT', ...state.commodities.BRENT, dir: 'flat' });
+    if (state.futures?.KOSPI_NIGHT?.price != null) updateFutures({ ...state.futures.KOSPI_NIGHT, dir: 'flat' });
+  }
+
+  // ── WebSocket 연결 ───────────────────────────────────────────────────────
+  let ws, retryDelay = 1000;
+
+  function connect() {
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      statusEl.className = 'connected';
+      retryDelay = 1000;
+    };
+
+    ws.onmessage = e => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch (_) { return; }
+
+      const noticeEl = document.getElementById('market-notice');
+      switch (msg.type) {
+        case 'init':         applyInit(msg.state); break;
+        case 'stock':        updateStock(msg);     noticeEl.style.display = 'none'; break;
+        case 'us_etf':       updateUsEtf(msg);     break;
+        case 'commodity':    updateCommodity(msg); noticeEl.style.display = 'none'; break;
+        case 'forex':        updateForex(msg);     noticeEl.style.display = 'none'; break;
+        case 'futures':      updateFutures(msg);   noticeEl.style.display = 'none'; break;
+        case 'market_closed':
+          noticeEl.textContent = msg.message;
+          noticeEl.style.display = 'block';
+          break;
+      }
+    };
+
+    ws.onerror = () => { statusEl.className = 'error'; };
+
+    ws.onclose = () => {
+      statusEl.className = '';
+      setTimeout(() => {
+        retryDelay = Math.min(retryDelay * 2, 30000);
+        connect();
+      }, retryDelay);
+    };
+  }
+
+  connect();
+</script>
+</body>
+</html>
