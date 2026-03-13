@@ -10,9 +10,19 @@ const REST_BASE  = 'https://openapivts.koreainvestment.com:29443';
 const KIS_WS_URL = 'ws://ops.koreainvestment.com:31000';
 const PORT       = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+// 1. 서버 인스턴스를 생성합니다.
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('서버가 정상적으로 작동 중입니다.');
+});
+
+// 2. app.listen이 아니라 생성한 server.listen을 사용합니다.
+server.listen(PORT, () => {
   console.log(`서버가 ${PORT}번 포트에서 실행 중입니다.`);
 });
+
+// 만약 WebSocket을 server에 연결하신다면 보통 아래처럼 씁니다.
+const wss = new WebSocket.Server({ server });
 
 const STOCKS = [
   { code: '005930', name: '삼성전자' },
