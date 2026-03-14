@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 const WebSocket = require('ws');
 const axios = require('axios');
@@ -5,10 +6,16 @@ const fs = require('fs');
 const path = require('path');
 
 // ── 설정 및 상수 ──────────────────────────────────────────────────────────────
-const APP_KEY    = 'PSZhfi3pK4PCameWNnp002YS3iC0ynNSuiF1';
-const APP_SECRET = 'ofumZDvY+H4exA36y6D1d6H0VQgf71KQZ2v3XgMjox93Z2x8mqyBDHC7f4KQAqpfVo9ZT1F23iTM2FAFX3iwmBkTWNGn1T89FJb3aonriOlg7ukuolUDgAfTr8OsEhJic9kMpOCkBpP0tXKddhnPAHHR83ZycM3i0IyRf8ZQPk4fsulrOWo=';
-const REST_BASE  = 'https://openapivts.koreainvestment.com:29443';
-const KIS_WS_URL = 'ws://ops.koreainvestment.com:31000';
+const APP_KEY    = process.env.KIS_APP_KEY;
+const APP_SECRET = process.env.KIS_APP_SECRET;
+
+if (!APP_KEY || !APP_SECRET) {
+  console.error('환경변수 KIS_APP_KEY, KIS_APP_SECRET 필요');
+  process.exit(1);
+}
+
+const REST_BASE  = 'https://openapi.koreainvestment.com:9443';
+const KIS_WS_URL = 'ws://ops.koreainvestment.com:21000';
 const PORT       = process.env.PORT || 3000;
 
 const STOCKS = [
@@ -23,14 +30,17 @@ const US_ETFS = [
   { symbol: 'DIA', name: '다우존스(DIA)' },
 ];
 
-// Yahoo Finance 심볼 목록
+// Yahoo Finance: 미국 ETF만 (원자재는 investing.com으로 분리)
 const YAHOO_SYMBOLS = [
-  { symbol: 'CL=F',      type: 'commodity', key: 'WTI',    label: 'WTI 원유' },
-  { symbol: 'BZ=F',      type: 'commodity', key: 'BRENT',  label: '브렌트 원유' },
-  { symbol: 'USDKRW=X',  type: 'forex',     key: 'USDKRW', label: '원/달러 환율' },
-  { symbol: 'QQQ',       type: 'us_etf',    key: 'QQQ',    label: '나스닥100(QQQ)' },
-  { symbol: 'SPY',       type: 'us_etf',    key: 'SPY',    label: 'S&P500(SPY)' },
-  { symbol: 'DIA',       type: 'us_etf',    key: 'DIA',    label: '다우존스(DIA)' },
+  { symbol: 'QQQ', key: 'QQQ', label: '나스닥100(QQQ)' },
+  { symbol: 'SPY', key: 'SPY', label: 'S&P500(SPY)' },
+  { symbol: 'DIA', key: 'DIA', label: '다우존스(DIA)' },
+];
+
+// investing.com 원자재 ID
+const INVESTING_COMMODITIES = [
+  { id: 8833, key: 'WTI',   name: 'WTI 원유' },
+  { id: 8862, key: 'BRENT', name: '브렌트 원유' },
 ];
 
 // ── 전역 상태 ─────────────────────────────────────────────────────────────────
@@ -192,22 +202,113 @@ async function refreshEsignal() {
   } catch (e) { console.error('[esignal] 폴링 오류'); }
 }
 
-// 5. Yahoo Finance (환율/원자재)
-async function refreshYahoo() {
-  for (const item of YAHOO_SYMBOLS) {
+// 5. 원자재 (WTI, 브렌트) - Yahoo Finance v7 quote + stooq fallback
+const COMMODITY_YAHOO = { 'CL=F': 'WTI', 'BZ=F': 'BRENT' };
+const COMMODITY_STOOQ = [
+  { s: 'cl.f', key: 'WTI',   name: 'WTI 원유' },
+  { s: 'cb.f', key: 'BRENT', name: '브렌트 원유' },
+];
+
+async function refreshCommodityStooq() {
+  for (const item of COMMODITY_STOOQ) {
     try {
-      const res = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(item.symbol)}`, { params: { interval: '1m', range: '1d' }, headers: { 'User-Agent': 'Mozilla/5.0' } });
-      const meta = res.data?.chart?.result?.[0]?.meta;
-      if (meta) {
-        const price = meta.regularMarketPrice;
-        const prev = meta.chartPreviousClose || meta.previousClose;
-        const change = parseFloat((price - prev).toFixed(4));
-        const changeRate = parseFloat(((price - prev) / prev * 100).toFixed(2));
-        if (item.type === 'commodity') state.commodities[item.key] = { price, change, changeRate };
-        else if (item.type === 'forex') state.forex.USDKRW = { rate: price, change, changeRate };
-        broadcast({ type: item.type, symbol: item.key, currency: 'USDKRW', price, rate: price, change, changeRate, dir: change > 0 ? 'up' : 'down' });
-      }
-    } catch (e) { console.error(`[Yahoo] ${item.label} 실패`); }
+      // stooq 일별 데이터 2행: 전일 + 오늘
+      const res = await axios.get(`https://stooq.com/q/d/l/?s=${item.s}&i=d`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000,
+      });
+      const lines = res.data.trim().split('\n').filter(l => l && !l.startsWith('Date'));
+      if (lines.length < 2) { console.warn(`[Stooq] ${item.name} 데이터 부족`); continue; }
+      // Date,Open,High,Low,Close,Volume
+      const prev  = parseFloat(lines[lines.length - 2].split(',')[4]); // 전일 Close
+      const price = parseFloat(lines[lines.length - 1].split(',')[4]); // 오늘 Close
+      const change     = parseFloat((price - prev).toFixed(2));
+      const changeRate = parseFloat(((price - prev) / prev * 100).toFixed(2));
+      state.commodities[item.key] = { price, change, changeRate };
+      broadcast({ type: 'commodity', symbol: item.key, name: item.name, price, change, changeRate, dir: change > 0 ? 'up' : 'down' });
+      console.log(`[Stooq] ${item.name}: ${price} (${change > 0 ? '+' : ''}${change})`);
+    } catch (e) { console.error(`[Stooq] ${item.name} 실패:`, e.message); }
+    await delay(300);
+  }
+}
+
+async function refreshInvesting() {
+  try {
+    // Yahoo Finance v7 quote: regularMarketPrice + regularMarketPreviousClose 한 번에
+    const res = await axios.get('https://query1.finance.yahoo.com/v7/finance/quote', {
+      params: { symbols: 'CL=F,BZ=F', fields: 'regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
+      timeout: 10000,
+    });
+    const quotes = res.data?.quoteResponse?.result;
+    if (!quotes || quotes.length === 0) throw new Error('결과 없음');
+
+    for (const q of quotes) {
+      const key  = COMMODITY_YAHOO[q.symbol];
+      if (!key) continue;
+      const item = INVESTING_COMMODITIES.find(c => c.key === key);
+      const price      = q.regularMarketPrice;
+      const prev       = q.regularMarketPreviousClose;
+      const change     = parseFloat((price - prev).toFixed(2));
+      const changeRate = parseFloat(((price - prev) / prev * 100).toFixed(2));
+      state.commodities[key] = { price, change, changeRate };
+      broadcast({ type: 'commodity', symbol: key, name: item?.name ?? key, price, change, changeRate, dir: change > 0 ? 'up' : 'down' });
+    }
+  } catch (e) {
+    console.error('[Yahoo Commodity] 실패:', e.message, '→ stooq fallback');
+    await refreshCommodityStooq();
+  }
+}
+
+// 6. Yahoo Finance 미국 ETF (QQQ, SPY, DIA) - v7 quote API
+async function refreshYahoo() {
+  try {
+    const symbols = YAHOO_SYMBOLS.map(y => y.symbol).join(',');
+    const res = await axios.get('https://query1.finance.yahoo.com/v7/finance/quote', {
+      params: { symbols, fields: 'regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
+      timeout: 10000,
+    });
+    const quotes = res.data?.quoteResponse?.result;
+    if (!quotes || quotes.length === 0) throw new Error('결과 없음');
+
+    for (const q of quotes) {
+      const item = YAHOO_SYMBOLS.find(y => y.symbol === q.symbol);
+      if (!item) continue;
+      const price      = q.regularMarketPrice;
+      const prev       = q.regularMarketPreviousClose;
+      const change     = parseFloat((price - prev).toFixed(2));
+      const changeRate = parseFloat(((price - prev) / prev * 100).toFixed(2));
+      state.usEtfs[item.key] = { ...state.usEtfs[item.key], price, change, changeRate };
+      broadcast({ type: 'us_etf', symbol: item.key, name: item.label, price, change, changeRate, dir: change > 0 ? 'up' : 'down' });
+    }
+  } catch (e) {
+    console.error('[Yahoo ETF] 실패:', e.message);
+    // fallback: stooq
+    await refreshEtfStooq();
+  }
+}
+
+async function refreshEtfStooq() {
+  const stooqEtfs = [
+    { s: 'qqq.us', key: 'QQQ', label: '나스닥100(QQQ)' },
+    { s: 'spy.us', key: 'SPY', label: 'S&P500(SPY)' },
+    { s: 'dia.us', key: 'DIA', label: '다우존스(DIA)' },
+  ];
+  for (const item of stooqEtfs) {
+    try {
+      const res = await axios.get(`https://stooq.com/q/d/l/?s=${item.s}&i=d`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000,
+      });
+      const lines = res.data.trim().split('\n').filter(l => l && !l.startsWith('Date'));
+      if (lines.length < 2) continue;
+      const prev  = parseFloat(lines[lines.length - 2].split(',')[4]);
+      const price = parseFloat(lines[lines.length - 1].split(',')[4]);
+      const change     = parseFloat((price - prev).toFixed(2));
+      const changeRate = parseFloat(((price - prev) / prev * 100).toFixed(2));
+      state.usEtfs[item.key] = { ...state.usEtfs[item.key], price, change, changeRate };
+      broadcast({ type: 'us_etf', symbol: item.key, name: item.label, price, change, changeRate, dir: change > 0 ? 'up' : 'down' });
+      console.log(`[Stooq ETF] ${item.label}: ${price}`);
+    } catch (e) { console.error(`[Stooq ETF] ${item.label} 실패:`, e.message); }
     await delay(300);
   }
 }
@@ -223,15 +324,48 @@ function connectKis() {
   });
   kisWs.on('message', data => {
     const text = data.toString();
-    if (text.startsWith('{')) return;
+
+    // ── JSON 메시지 (구독응답, 오류, PINGPONG) ──────────────────────────────
+    if (text.startsWith('{')) {
+      try {
+        const json = JSON.parse(text);
+        const trId = json.header?.tr_id;
+        if (trId === 'PINGPONG') {
+          kisWs.send(text);
+        } else {
+          // 구독 성공/실패 응답 확인
+          console.log(`[KIS WS JSON] tr_id=${trId} body:`, JSON.stringify(json.body ?? json).substring(0, 300));
+        }
+      } catch (_) {}
+      return;
+    }
+
+    // ── 파이프 구분 실시간 데이터 ───────────────────────────────────────────
     const parts = text.split('|');
     if (parts.length < 4) return;
     const trId = parts[1];
-    const f = parts[3].split('^');
+    const f    = parts[3].split('^');
+
     if (trId === 'H0STCNT0') {
       const code = f[0];
       state.stocks[code] = { ...state.stocks[code], price: parseFloat(f[2]), sign: f[3], change: parseFloat(f[4]), changeRate: parseFloat(f[5]) };
       broadcast({ type: 'stock', code, price: parseFloat(f[2]), sign: f[3], change: parseFloat(f[4]), changeRate: parseFloat(f[5]), dir: signToDir(f[3]) });
+
+    } else if (trId === 'H0FOREXS' || trId === 'H0FOREXS0') {
+      // 수신된 전체 필드 로그 (필드 인덱스 확인용)
+      console.log(`[KIS WS] ${trId} 전체필드(${f.length}개):`, f.slice(0, 15));
+      // f[0]: 통화코드, f[1]: 시간, f[2]: 현재환율
+      const rate = parseFloat(f[2]);
+      if (!rate) { console.warn(`[KIS WS] ${trId} rate 파싱 실패, f[2]="${f[2]}"`); return; }
+      const prev       = state.forex.USDKRW.rate || rate;
+      const change     = parseFloat((rate - prev).toFixed(2));
+      const changeRate = parseFloat(((rate - prev) / prev * 100).toFixed(2));
+      state.forex.USDKRW = { rate, change, changeRate };
+      broadcast({ type: 'forex', symbol: 'USDKRW', name: '원/달러 환율', rate, change, changeRate, dir: change > 0 ? 'up' : change < 0 ? 'down' : 'flat' });
+
+    } else {
+      // 알 수 없는 TR_ID 로그 (H0NOCNT0 등 확인용)
+      console.log(`[KIS WS] 미처리 trId=${trId} fields[0-4]:`, f.slice(0, 5));
     }
   });
   kisWs.on('close', () => setTimeout(connectKis, 5000));
@@ -240,12 +374,29 @@ function connectKis() {
 // ── 시작 ──────────────────────────────────────────────────────────────────────
 server.listen(PORT, async () => {
   console.log(`서버 오픈: 포트 ${PORT}`);
+
+  // KIS 인증 (실패해도 폴링 소스는 계속 시작)
   try {
     await Promise.all([getApprovalKey(), getAccessToken()]);
+    console.log('[KIS] 인증 성공');
     await fetchKisStockPrices();
-    await fetchNightFuturesPrevClose();
-    setInterval(refreshYahoo, 30000); refreshYahoo();
-    setInterval(refreshEsignal, 10000); refreshEsignal();
+  } catch (err) {
+    console.error('[KIS] 인증/주식 초기화 실패:', err.message, '(상태코드:', err.response?.status ?? '-', ')');
+    console.warn('[KIS] KIS 없이 폴링 소스만 사용합니다.');
+  }
+
+  // esignal 전일종가 (실패해도 무시)
+  try { await fetchNightFuturesPrevClose(); } catch (_) {}
+
+  // 폴링 소스 — KIS 실패와 무관하게 항상 시작
+  setInterval(refreshInvesting, 30000); refreshInvesting();
+  setInterval(refreshYahoo, 30000); refreshYahoo();
+  setInterval(refreshEsignal, 10000); refreshEsignal();
+
+  // KIS WebSocket — approvalKey 있을 때만 연결
+  if (approvalKey) {
     connectKis();
-  } catch (err) { console.error('초기화 실패:', err.message); }
+  } else {
+    console.warn('[KIS] approvalKey 없음 → WebSocket 연결 건너뜀');
+  }
 });
