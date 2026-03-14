@@ -6,400 +6,508 @@
   <title>AFM 실시간 주식 대시보드</title>
   <style>
     :root {
-      --bg: #0d1117;
-      --card: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --up: #f85149;
-      --down: #388bfd;
-      --flat: #8b949e;
-      --accent: #58a6ff;
+      --bg: #0d1117; --card: #161b22; --card2: #1c2128;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --up: #f85149; --down: #388bfd; --flat: #8b949e;
+      --accent: #58a6ff; --green: #3fb950;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif; min-height: 100vh; padding: 16px; }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
-      min-height: 100vh;
-      padding: 16px;
-    }
+    h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    #status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+    #status.connected { background: var(--green); }
+    #status.error { background: var(--up); }
 
-    h1 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--accent);
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    h2 { font-size: 0.72rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 8px; }
 
-    #status {
-      display: inline-block;
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--muted);
-      transition: background 0.3s;
-    }
-    #status.connected { background: #3fb950; }
-    #status.error     { background: var(--up); }
+    #market-notice { display: none; background: #21262d; border: 1px solid #f0883e; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; color: #f0883e; font-size: 0.85rem; }
 
-    h2 {
-      font-size: 0.75rem;
-      font-weight: 500;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin: 20px 0 8px;
-    }
-
-    /* ── 주식 그리드 ─────────────────── */
-    .stock-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-      gap: 10px;
-    }
+    /* ── 종목 그리드 ── */
+    .stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); gap: 10px; }
 
     .stock-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
+      position: relative; min-width: 0;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 14px 12px;
+      transition: border-color 0.2s;
     }
+    .stock-card:hover { border-color: #484f58; }
 
-    .stock-name {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 6px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .stock-name { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stock-currency { font-size: 0.62rem; color: #484f58; vertical-align: middle; margin-left: 3px; }
+    .stock-price { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .stock-change { font-size: 0.75rem; margin-top: 3px; }
+
+    /* ── 삭제 버튼 ── */
+    .remove-btn {
+      position: absolute; top: 6px; right: 6px;
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 14px; width: 20px; height: 20px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s;
+      line-height: 1;
     }
+    .stock-card:hover .remove-btn { opacity: 1; }
+    .remove-btn:hover { color: var(--up); background: rgba(248,81,73,0.12); }
 
-    .stock-price {
-      font-size: 1.35rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+    /* ── 추가 카드 ── */
+    .add-card {
+      background: transparent; border: 1.5px dashed var(--border); border-radius: 10px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; min-height: 90px; transition: border-color 0.2s, color 0.2s;
+      color: var(--muted); gap: 4px;
     }
+    .add-card:hover { border-color: var(--accent); color: var(--accent); }
+    .add-icon { font-size: 1.6rem; line-height: 1; font-weight: 300; }
+    .add-label { font-size: 0.7rem; }
 
-    .stock-change {
-      font-size: 0.78rem;
-      margin-top: 4px;
-    }
-
+    /* ── 색상 ── */
     .up   { color: var(--up); }
     .down { color: var(--down); }
     .flat { color: var(--muted); }
 
-    /* ── 기타 데이터 그리드 ──────────── */
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 10px;
-    }
+    /* ── 정보 그리드 ── */
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .info-card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .info-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
+    .info-value { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .info-sub { font-size: 0.75rem; margin-top: 4px; }
 
-    .info-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
-    }
-
-    .info-label {
-      font-size: 0.75rem;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-
-    .info-value {
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .info-sub {
-      font-size: 0.75rem;
-      margin-top: 4px;
-    }
-
-    /* ── 깜빡임 애니메이션 ────────────── */
-    @keyframes flash-up {
-      0%   { background: rgba(248, 81, 73, 0.3); }
-      100% { background: transparent; }
-    }
-    @keyframes flash-down {
-      0%   { background: rgba(56, 139, 253, 0.3); }
-      100% { background: transparent; }
-    }
-
+    /* ── 플래시 ── */
+    @keyframes flash-up   { 0% { background: rgba(248,81,73,0.25); } 100% { background: transparent; } }
+    @keyframes flash-down { 0% { background: rgba(56,139,253,0.25); } 100% { background: transparent; } }
     .flash-up   { animation: flash-up   0.6s ease-out; }
     .flash-down { animation: flash-down 0.6s ease-out; }
 
-    /* ── 반응형 ─────────────────────── */
-    /*
-    @media (max-width: 480px) {
-      .stock-grid { grid-template-columns: repeat(2, 1fr); }
-      .info-grid  { grid-template-columns: repeat(2, 1fr); }
+    /* ── 모달 오버레이 ── */
+    #modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(1,4,9,0.75); z-index: 200;
+      align-items: center; justify-content: center;
     }
-      */
-    /* ✅ 수정 후 (한 줄에 3개 배치) */
-    @media (max-width: 480px) {
-      .stock-grid { grid-template-columns: repeat(3, 1fr); }
-      .info-grid  { grid-template-columns: repeat(3, 1fr); }
-      
-      /* 팁: 글자가 좁아질 수 있으므로 여백이나 폰트 크기를 조금 줄여주면 더 예쁩니다. */
-      .stock-card, .info-card { padding: 10px 8px; }
-      .stock-price, .info-value { font-size: 1.1rem; }
+    #modal-overlay.open { display: flex; }
+
+    /* ── 모달 ── */
+    #modal {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      width: 420px; max-width: 92vw; max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+    }
+
+    /* 모달 헤더 */
+    #modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px 0; flex-shrink: 0;
+    }
+    #modal-header span { font-size: 1rem; font-weight: 600; color: var(--text); }
+    #modal-close {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 1.3rem; width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.15s, background 0.15s;
+    }
+    #modal-close:hover { color: var(--text); background: var(--card2); }
+
+    /* 탭 */
+    #modal-tabs { display: flex; gap: 0; padding: 14px 20px 0; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-tab {
+      background: none; border: none; cursor: pointer;
+      padding: 8px 16px; font-size: 0.88rem; color: var(--muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.15s; font-weight: 500;
+    }
+    .modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .modal-tab:hover:not(.active) { color: var(--text); }
+
+    /* 검색창 */
+    #modal-search-wrap { padding: 14px 20px 0; flex-shrink: 0; }
+    #search-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; color: var(--text); font-size: 0.9rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    #search-input:focus { border-color: var(--accent); }
+    #search-input::placeholder { color: var(--muted); }
+
+    /* 결과 목록 */
+    #search-results { flex: 1; overflow-y: auto; padding: 10px 12px 14px; }
+    #search-results::-webkit-scrollbar { width: 4px; }
+    #search-results::-webkit-scrollbar-track { background: transparent; }
+    #search-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .search-hint { padding: 24px 8px; color: var(--muted); font-size: 0.82rem; text-align: center; }
+
+    .search-result {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 10px; border-radius: 8px; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .search-result:hover:not(.exists) { background: var(--card2); }
+    .search-result.exists { opacity: 0.45; cursor: default; }
+
+    .result-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .result-name { font-size: 0.88rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .result-meta { font-size: 0.72rem; color: var(--muted); }
+    .result-code { font-weight: 600; }
+
+    .result-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .result-exchange { font-size: 0.68rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
+    .result-add-btn {
+      width: 24px; height: 24px; border-radius: 6px; background: var(--accent);
+      color: #0d1117; border: none; cursor: pointer; font-size: 1rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .result-add-btn:hover { background: #79c0ff; }
+    .result-added { font-size: 0.72rem; color: var(--green); }
+
+    /* ── 야간선물 휴장 뱃지 ── */
+    .closed-badge {
+      font-size: 0.6rem; background: #21262d; border: 1px solid var(--muted);
+      color: var(--muted); border-radius: 3px; padding: 1px 5px;
+      vertical-align: middle; margin-left: 5px;
+    }
+
+    /* ── 모바일 반응형 ── */
+    html, body { max-width: 100%; overflow-x: hidden; }
+    @media (max-width: 500px) {
+      body { padding: 10px; }
+      .stock-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .info-grid  { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .stock-card, .add-card { padding: 10px 8px 9px; min-height: 80px; }
+      .info-card  { padding: 12px 10px; }
+      .stock-price, .info-value { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .stock-change, .info-sub  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .stock-name, .info-label, .stock-change, .info-sub { font-size: 0.68rem; }
+      h1 { font-size: 0.9rem; }
     }
   </style>
 </head>
 <body>
 
-<h1>
-  <span id="status"></span>
-  대박나자! AFM 실시간 주식 대시보드
-</h1>
+<h1><span id="status"></span> 대박나자! AFM 실시간 주식 대시보드</h1>
 
-<div id="market-notice" style="display:none; background:#21262d; border:1px solid #f0883e; border-radius:8px; padding:10px 14px; margin-bottom:14px; color:#f0883e; font-size:0.85rem;"></div>
+<div id="market-notice"></div>
 
-<!-- 국내주식 섹션 -->
-<h2>국내주식</h2>
-<div class="stock-grid" id="stockGrid">
-  <div class="stock-card" id="stock-005930">
-    <div class="stock-name">삼성전자</div>
-    <div class="stock-price flat">-</div>
-    <div class="stock-change flat">-</div>
-  </div>
-  <div class="stock-card" id="stock-000660">
-    <div class="stock-name">SK하이닉스</div>
-    <div class="stock-price flat">-</div>
-    <div class="stock-change flat">-</div>
-  </div>
-  <div class="stock-card" id="stock-005380">
-    <div class="stock-name">현대차</div>
-    <div class="stock-price flat">-</div>
-    <div class="stock-change flat">-</div>
-  </div>
-</div>
+<!-- MY 종목 -->
+<h2>MY 종목</h2>
+<div class="stock-grid" id="stockGrid"></div>
 
-<!-- 미국 ETF 섹션 -->
-<h2>미국 ETF</h2>
-<div class="stock-grid" id="etfGrid">
-  <div class="stock-card" id="etf-QQQ">
-    <div class="stock-name">나스닥100(QQQ)</div>
-    <div class="stock-price flat">-</div>
-    <div class="stock-change flat">-</div>
-  </div>
-  <div class="stock-card" id="etf-SPY">
-    <div class="stock-name">S&amp;P500(SPY)</div>
-    <div class="stock-price flat">-</div>
-    <div class="stock-change flat">-</div>
-  </div>
-  <div class="stock-card" id="etf-DIA">
-    <div class="stock-name">다우존스(DIA)</div>
-    <div class="stock-price flat">-</div>
-    <div class="stock-change flat">-</div>
-  </div>
-</div>
-
-<!-- 원자재 / 환율 섹션 -->
+<!-- 원자재 & 환율 -->
 <h2>원자재 &amp; 환율</h2>
 <div class="info-grid">
   <div class="info-card" id="card-WTI">
     <div class="info-label">WTI 원유 (USD/배럴)</div>
     <div class="info-value flat" id="wti-price">-</div>
-    <div class="info-sub flat"  id="wti-change">-</div>
+    <div class="info-sub flat"   id="wti-change">-</div>
   </div>
   <div class="info-card" id="card-BRENT">
     <div class="info-label">브렌트 원유 (USD/배럴)</div>
     <div class="info-value flat" id="brent-price">-</div>
-    <div class="info-sub flat"  id="brent-change">-</div>
+    <div class="info-sub flat"   id="brent-change">-</div>
   </div>
   <div class="info-card" id="card-USDKRW">
     <div class="info-label">원/달러 환율</div>
     <div class="info-value flat" id="fx-price">-</div>
-    <div class="info-sub flat"  id="fx-change">-</div>
+    <div class="info-sub flat"   id="fx-change">-</div>
   </div>
 </div>
 
-<!-- 야간선물 섹션 -->
+<!-- 야간선물 -->
 <h2>야간선물</h2>
 <div class="info-grid">
   <div class="info-card" id="card-KOSPI_NIGHT">
-    <div class="info-label">코스피 야간선물</div>
+    <div class="info-label">코스피 야간선물<span id="fut-closed" class="closed-badge" style="display:none">휴장</span></div>
     <div class="info-value flat" id="fut-price">-</div>
-    <div class="info-sub flat"  id="fut-change">-</div>
+    <div class="info-sub flat"   id="fut-change">-</div>
+  </div>
+</div>
+
+<!-- 종목 추가 모달 -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-header">
+      <span>종목 추가</span>
+      <button id="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-tabs">
+      <button class="modal-tab active" data-tab="domestic" onclick="setTab('domestic')">국내주식</button>
+      <button class="modal-tab"        data-tab="foreign"  onclick="setTab('foreign')">해외주식</button>
+    </div>
+    <div id="modal-search-wrap">
+      <input type="text" id="search-input" placeholder="종목명 또는 종목코드 검색" oninput="onSearchInput()" autocomplete="off" />
+    </div>
+    <div id="search-results">
+      <div class="search-hint">종목명이나 코드를 입력하세요</div>
+    </div>
   </div>
 </div>
 
 <script>
+  // ── WebSocket ──────────────────────────────────────────────────────────────
   const WS_URL = (() => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}`;
   })();
+  const statusEl  = document.getElementById('status');
+  const noticeEl  = document.getElementById('market-notice');
+  let ws, retryDelay = 1000;
 
-  const statusEl = document.getElementById('status');
+  function connect() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen  = () => { statusEl.className = 'connected'; retryDelay = 1000; };
+    ws.onerror = () => { statusEl.className = 'error'; };
+    ws.onclose = () => {
+      statusEl.className = '';
+      setTimeout(() => { retryDelay = Math.min(retryDelay * 2, 30000); connect(); }, retryDelay);
+    };
+    ws.onmessage = e => {
+      let msg; try { msg = JSON.parse(e.data); } catch (_) { return; }
+      switch (msg.type) {
+        case 'init':
+          renderWatchlist(msg.watchlist || []);
+          if (msg.state?.forex?.USDKRW?.rate != null)        { const d = msg.state.forex.USDKRW;        updateForex({ ...d, dir: calcDir(d.change) }); }
+          if (msg.state?.commodities?.WTI?.price != null)    { const d = msg.state.commodities.WTI;    updateCommodity({ symbol: 'WTI',   name: 'WTI 원유',    ...d, dir: calcDir(d.change) }); }
+          if (msg.state?.commodities?.BRENT?.price != null)  { const d = msg.state.commodities.BRENT;  updateCommodity({ symbol: 'BRENT', name: '브렌트 원유', ...d, dir: calcDir(d.change) }); }
+          if (msg.state?.futures?.KOSPI_NIGHT?.price != null) { const d = msg.state.futures.KOSPI_NIGHT; updateFutures({ ...d, dir: calcDir(d.change) }); }
+          break;
+        case 'watchlist_updated': renderWatchlist(msg.watchlist); break;
+        case 'stock':     updateStockCard(msg);   noticeEl.style.display = 'none'; break;
+        case 'us_etf':    updateEtfCard(msg);     break;
+        case 'commodity': updateCommodity(msg);   break;
+        case 'forex':     updateForex(msg);       break;
+        case 'futures':   updateFutures(msg);     break;
+        case 'market_closed': noticeEl.textContent = msg.message; noticeEl.style.display = 'block'; break;
+      }
+    };
+  }
+  connect();
 
-  // ── 숫자 포맷 ────────────────────────────────────────────────────────────
-  const fmtKRW    = n => n == null ? '-' : n.toLocaleString('ko-KR') + '원';
-  const fmtUSD    = n => n == null ? '-' : '$' + n.toFixed(2);
-  const fmtFX     = n => n == null ? '-' : n.toLocaleString('ko-KR', { minimumFractionDigits: 2 }) + '원';
-  const fmtChange = (c, r, dir) => {
+  // ── 포맷 ───────────────────────────────────────────────────────────────────
+  const calcDir = c => c > 0 ? 'up' : c < 0 ? 'down' : 'flat';
+  const fmtKRW = n => n == null ? '-' : n.toLocaleString('ko-KR') + '원';
+  const fmtUSD = n => n == null ? '-' : '$' + n.toFixed(2);
+  const fmtFX  = n => n == null ? '-' : n.toLocaleString('ko-KR', { minimumFractionDigits: 2 }) + '원';
+
+  function fmtChange(c, r, dir, isKRW = true) {
     if (c == null) return '-';
     const sign = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
-    return `${sign} ${Math.abs(c).toLocaleString('ko-KR')} (${Math.abs(r).toFixed(2)}%)`;
-  };
-  const fmtChangeUSD = (c, r, dir) => {
-    if (c == null) return '-';
-    const sign = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
-    return `${sign} ${Math.abs(c).toFixed(2)} (${Math.abs(r).toFixed(2)}%)`;
-  };
+    const val  = isKRW ? Math.abs(c).toLocaleString('ko-KR') : Math.abs(c).toFixed(2);
+    return `${sign} ${val} (${Math.abs(r ?? 0).toFixed(2)}%)`;
+  }
 
-  // ── DOM 업데이트 헬퍼 ────────────────────────────────────────────────────
+  // ── DOM 헬퍼 ──────────────────────────────────────────────────────────────
   function flashEl(el, dir) {
     el.classList.remove('flash-up', 'flash-down');
-    void el.offsetWidth; // reflow
+    void el.offsetWidth;
     if (dir === 'up')   el.classList.add('flash-up');
     if (dir === 'down') el.classList.add('flash-down');
   }
-
   function setClass(el, dir) {
     el.className = el.className.replace(/\b(up|down|flat)\b/g, '').trim();
     el.classList.add(dir === 'up' ? 'up' : dir === 'down' ? 'down' : 'flat');
   }
 
-  // ── 국내주식 업데이트 ────────────────────────────────────────────────────
-  function updateStock({ code, price, change, changeRate, dir }) {
-    const card = document.getElementById(`stock-${code}`);
+  // 값이 바뀌었을 때만 플래시
+  const _prev = {};
+  function flashIfChanged(el, dir, key, newVal) {
+    if (_prev[key] === newVal) return;
+    _prev[key] = newVal;
+    flashEl(el, dir);
+  }
+
+  // ── 워치리스트 렌더링 ──────────────────────────────────────────────────────
+  function renderWatchlist(watchlist) {
+    const grid = document.getElementById('stockGrid');
+    grid.innerHTML = '';
+    watchlist.forEach(item => grid.appendChild(createCard(item)));
+    // + 추가 카드
+    const add = document.createElement('div');
+    add.className = 'stock-card add-card';
+    add.onclick = openModal;
+    add.innerHTML = `<div class="add-icon">＋</div><div class="add-label">종목 추가</div>`;
+    grid.appendChild(add);
+  }
+
+  function createCard(item) {
+    const isKRW = item.type === 'domestic';
+    const cardId = isKRW ? `card-d-${item.code}` : `card-f-${item.symbol}`;
+    const dir   = item.dir ?? (item.change == null ? 'flat' : item.change > 0 ? 'up' : item.change < 0 ? 'down' : 'flat');
+    const price = item.price;
+    const div   = document.createElement('div');
+    div.className = 'stock-card';
+    div.id = cardId;
+    div.dataset.type = item.type;
+    div.dataset.id   = isKRW ? item.code : item.symbol;
+    div.innerHTML = `
+      <button class="remove-btn" title="삭제">✕</button>
+      <div class="stock-name">${item.name}${isKRW ? '' : '<span class="stock-currency">USD</span>'}</div>
+      <div class="stock-price ${dir}">${price == null ? '-' : isKRW ? fmtKRW(price) : fmtUSD(price)}</div>
+      <div class="stock-change ${dir}">${fmtChange(item.change, item.changeRate, dir, isKRW)}</div>
+    `;
+    div.querySelector('.remove-btn').onclick = e => {
+      e.stopPropagation();
+      sendWS(isKRW
+        ? { type: 'remove_stock', stockType: 'domestic', code: item.code }
+        : { type: 'remove_stock', stockType: 'foreign',  symbol: item.symbol });
+    };
+    return div;
+  }
+
+  function updateStockCard({ code, price, sign, change, changeRate, dir }) {
+    const card = document.querySelector(`[data-type="domestic"][data-id="${code}"]`);
     if (!card) return;
     const priceEl  = card.querySelector('.stock-price');
     const changeEl = card.querySelector('.stock-change');
-
     priceEl.textContent  = fmtKRW(price);
-    changeEl.textContent = fmtChange(change, changeRate, dir);
-    setClass(priceEl, dir);
-    setClass(changeEl, dir);
-    flashEl(card, dir);
+    changeEl.textContent = fmtChange(change, changeRate, dir, true);
+    setClass(priceEl, dir); setClass(changeEl, dir);
+    flashIfChanged(card, dir, `d-${code}`, price);
   }
 
-  // ── 미국 ETF 업데이트 ────────────────────────────────────────────────────
-  function updateUsEtf({ symbol, price, change, changeRate, dir }) {
-    const card = document.getElementById(`etf-${symbol}`);
+  function updateEtfCard({ symbol, price, change, changeRate, dir }) {
+    const card = document.querySelector(`[data-type="foreign"][data-id="${symbol}"]`);
     if (!card) return;
     const priceEl  = card.querySelector('.stock-price');
     const changeEl = card.querySelector('.stock-change');
-
     priceEl.textContent  = fmtUSD(price);
-    changeEl.textContent = fmtChangeUSD(change, changeRate, dir);
-    setClass(priceEl, dir);
-    setClass(changeEl, dir);
-    flashEl(card, dir);
+    changeEl.textContent = fmtChange(change, changeRate, dir, false);
+    setClass(priceEl, dir); setClass(changeEl, dir);
+    flashIfChanged(card, dir, `f-${symbol}`, price);
   }
 
-  // ── 원자재 업데이트 ──────────────────────────────────────────────────────
+  // ── 원자재 / 환율 / 선물 ──────────────────────────────────────────────────
   function updateCommodity({ symbol, price, change, changeRate, dir }) {
-    const s = symbol === 'WTI' ? 'wti' : 'brent';
+    const s        = symbol === 'WTI' ? 'wti' : 'brent';
     const priceEl  = document.getElementById(`${s}-price`);
     const changeEl = document.getElementById(`${s}-change`);
     const card     = document.getElementById(`card-${symbol}`);
     if (!priceEl) return;
     priceEl.textContent  = fmtUSD(price);
-    changeEl.textContent = fmtChangeUSD(change, changeRate, dir);
-    setClass(priceEl, dir);
-    setClass(changeEl, dir);
-    flashEl(card, dir);
+    changeEl.textContent = fmtChange(change, changeRate, dir, false);
+    setClass(priceEl, dir); setClass(changeEl, dir);
+    if (card) flashIfChanged(card, dir, `commodity-${symbol}`, price);
   }
 
-  // ── 환율 업데이트 ────────────────────────────────────────────────────────
   function updateForex({ rate, change, changeRate, dir }) {
     const priceEl  = document.getElementById('fx-price');
     const changeEl = document.getElementById('fx-change');
     const card     = document.getElementById('card-USDKRW');
     priceEl.textContent  = fmtFX(rate);
-    changeEl.textContent = fmtChange(change, changeRate, dir);
-    setClass(priceEl, dir);
-    setClass(changeEl, dir);
-    flashEl(card, dir);
+    changeEl.textContent = fmtChange(change, changeRate, dir, true);
+    setClass(priceEl, dir); setClass(changeEl, dir);
+    flashIfChanged(card, dir, 'forex-USDKRW', rate);
   }
 
-  // ── 야간선물 업데이트 ─────────────────────────────────────────────────────
-  function updateFutures({ price, change, changeRate, dir }) {
-    const priceEl  = document.getElementById('fut-price');
-    const changeEl = document.getElementById('fut-change');
-    const card     = document.getElementById('card-KOSPI_NIGHT');
+  function updateFutures({ price, change, changeRate, dir, closed }) {
+    const priceEl   = document.getElementById('fut-price');
+    const changeEl  = document.getElementById('fut-change');
+    const card      = document.getElementById('card-KOSPI_NIGHT');
+    const closedEl  = document.getElementById('fut-closed');
     priceEl.textContent  = price == null ? '-' : price.toFixed(2);
-    changeEl.textContent = fmtChangeUSD(change, changeRate, dir);
-    setClass(priceEl, dir);
-    setClass(changeEl, dir);
-    flashEl(card, dir);
+    changeEl.textContent = fmtChange(change, changeRate, dir, false);
+    setClass(priceEl, dir); setClass(changeEl, dir);
+    if (closedEl) closedEl.style.display = closed ? 'inline' : 'none';
+    if (!closed) flashIfChanged(card, dir, 'futures-KOSPI_NIGHT', price);
   }
 
-  // ── 초기 상태 렌더 ───────────────────────────────────────────────────────
-  function applyInit(state) {
-    if (state.stocks) {
-      Object.values(state.stocks).forEach(s => {
-        if (s.price != null) updateStock({ ...s, dir: s.sign === '2' || s.sign === '1' ? 'up' : s.sign === '5' || s.sign === '4' ? 'down' : 'flat' });
-      });
+  // ── 모달 ──────────────────────────────────────────────────────────────────
+  let currentTab = 'domestic', searchTimer = null;
+
+  function openModal() {
+    document.getElementById('modal-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('search-input').focus(), 50);
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
+  }
+
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  function setTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.getElementById('search-input').placeholder = tab === 'domestic' ? '종목명 또는 종목코드 검색' : '티커 또는 회사명 검색';
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
+  }
+
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) { document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>'; return; }
+    document.getElementById('search-results').innerHTML = '<div class="search-hint">검색 중...</div>';
+    searchTimer = setTimeout(() => doSearch(q), 200);
+  }
+
+  async function doSearch(q) {
+    try {
+      const res     = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${currentTab}`);
+      const results = await res.json();
+      renderResults(results);
+    } catch (e) {
+      document.getElementById('search-results').innerHTML = '<div class="search-hint">검색에 실패했습니다</div>';
     }
-    if (state.usEtfs) {
-      Object.values(state.usEtfs).forEach(e => {
-        if (e.price != null) {
-          const dir = e.change == null ? 'flat' : e.change > 0 ? 'up' : e.change < 0 ? 'down' : 'flat';
-          updateUsEtf({ ...e, dir });
-        }
+  }
+
+  function renderResults(results) {
+    const el = document.getElementById('search-results');
+    if (!results.length) { el.innerHTML = '<div class="search-hint">검색 결과가 없습니다</div>'; return; }
+    el.innerHTML = results.map(r => {
+      const isDomestic = currentTab === 'domestic';
+      const id     = isDomestic ? r.code   : r.symbol;
+      const type   = isDomestic ? 'domestic' : 'foreign';
+      const exists = !!document.querySelector(`[data-type="${type}"][data-id="${id}"]`);
+      const name   = escHtml(r.name || r.symbol);
+      const sub    = isDomestic ? `<span class="result-code">${r.code}</span>` : `<span class="result-code">${r.symbol}</span> · ${r.typeDisp || ''}`;
+      return `
+        <div class="search-result${exists ? ' exists' : ''}"
+             data-id="${escAttr(id)}" data-type="${type}"
+             data-name="${escAttr(r.name || r.symbol)}"
+             data-exchange="${escAttr(r.exchange || '')}">
+          <div class="result-left">
+            <span class="result-name">${name}</span>
+            <span class="result-meta">${sub}</span>
+          </div>
+          <div class="result-right">
+            <span class="result-exchange">${r.exchange || ''}</span>
+            ${exists
+              ? '<span class="result-added">추가됨</span>'
+              : `<button class="result-add-btn" title="추가">+</button>`}
+          </div>
+        </div>`;
+    }).join('');
+
+    el.querySelectorAll('.search-result:not(.exists) .result-add-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const row      = btn.closest('.search-result');
+        const type     = row.dataset.type;
+        const id       = row.dataset.id;
+        const name     = row.dataset.name;
+        const exchange = row.dataset.exchange;
+        sendWS(type === 'domestic'
+          ? { type: 'add_stock', stockType: 'domestic', code: id,   name }
+          : { type: 'add_stock', stockType: 'foreign',  symbol: id, name, exchange });
+        closeModal();
       });
-    }
-    if (state.forex?.USDKRW?.rate != null) updateForex({ ...state.forex.USDKRW, dir: 'flat' });
-    if (state.commodities?.WTI?.price != null) updateCommodity({ symbol: 'WTI', ...state.commodities.WTI, dir: 'flat' });
-    if (state.commodities?.BRENT?.price != null) updateCommodity({ symbol: 'BRENT', ...state.commodities.BRENT, dir: 'flat' });
-    if (state.futures?.KOSPI_NIGHT?.price != null) updateFutures({ ...state.futures.KOSPI_NIGHT, dir: 'flat' });
+    });
   }
 
-  // ── WebSocket 연결 ───────────────────────────────────────────────────────
-  let ws, retryDelay = 1000;
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-  function connect() {
-    ws = new WebSocket(WS_URL);
-
-    ws.onopen = () => {
-      statusEl.className = 'connected';
-      retryDelay = 1000;
-    };
-
-    ws.onmessage = e => {
-      let msg;
-      try { msg = JSON.parse(e.data); } catch (_) { return; }
-
-      const noticeEl = document.getElementById('market-notice');
-      switch (msg.type) {
-        case 'init':         applyInit(msg.state); break;
-        case 'stock':        updateStock(msg);     noticeEl.style.display = 'none'; break;
-        case 'us_etf':       updateUsEtf(msg);     break;
-        case 'commodity':    updateCommodity(msg); noticeEl.style.display = 'none'; break;
-        case 'forex':        updateForex(msg);     noticeEl.style.display = 'none'; break;
-        case 'futures':      updateFutures(msg);   noticeEl.style.display = 'none'; break;
-        case 'market_closed':
-          noticeEl.textContent = msg.message;
-          noticeEl.style.display = 'block';
-          break;
-      }
-    };
-
-    ws.onerror = () => { statusEl.className = 'error'; };
-
-    ws.onclose = () => {
-      statusEl.className = '';
-      setTimeout(() => {
-        retryDelay = Math.min(retryDelay * 2, 30000);
-        connect();
-      }, retryDelay);
-    };
+  // ── WebSocket 송신 ─────────────────────────────────────────────────────────
+  function sendWS(msg) {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   }
-
-  connect();
 </script>
 </body>
 </html>
