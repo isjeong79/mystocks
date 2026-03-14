@@ -162,6 +162,60 @@
     .result-add-btn:hover { background: #79c0ff; }
     .result-added { font-size: 0.72rem; color: var(--green); }
 
+    /* ── 사용자 영역 ── */
+    #user-area { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: flex-end; }
+    #user-name  { font-size: 0.82rem; color: var(--muted); }
+    #user-name strong { color: var(--accent); }
+    .auth-btn {
+      background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 0.8rem; padding: 5px 12px; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .auth-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── 인증 모달 ── */
+    #auth-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(1,4,9,0.75); z-index: 300;
+      align-items: center; justify-content: center;
+    }
+    #auth-overlay.open { display: flex; }
+    #auth-modal {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      width: 320px; max-width: 92vw; padding: 24px;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+    }
+    #auth-modal h3 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+    #auth-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; color: var(--text); font-size: 0.9rem; outline: none;
+      transition: border-color 0.15s; margin-bottom: 12px;
+    }
+    #auth-input:focus { border-color: var(--accent); }
+    #auth-input::placeholder { color: var(--muted); }
+    #auth-error { font-size: 0.78rem; color: var(--up); margin-bottom: 10px; min-height: 18px; }
+    .auth-actions { display: flex; gap: 8px; }
+    .auth-action-btn {
+      flex: 1; padding: 9px; border-radius: 7px; border: none; cursor: pointer;
+      font-size: 0.85rem; font-weight: 600; transition: background 0.15s;
+    }
+    #btn-register { background: var(--accent); color: #0d1117; }
+    #btn-register:hover { background: #79c0ff; }
+    #btn-login    { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+    #btn-login:hover { border-color: var(--accent); color: var(--accent); }
+    #btn-auth-cancel { background: none; border: 1px solid var(--border); color: var(--muted); flex: none; padding: 9px 14px; }
+
+    /* ── 업데이트 버튼 ── */
+    #update-section { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    #btn-update-stocks {
+      background: var(--card2); border: 1px solid var(--border); border-radius: 7px;
+      color: var(--muted); font-size: 0.8rem; padding: 7px 16px; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #btn-update-stocks:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    #btn-update-stocks:disabled { opacity: 0.5; cursor: default; }
+    #update-status { font-size: 0.75rem; color: var(--muted); }
+
     /* ── 야간선물 휴장 뱃지 ── */
     .closed-badge {
       font-size: 0.6rem; background: #21262d; border: 1px solid var(--muted);
@@ -188,7 +242,27 @@
 
 <h1><span id="status"></span> 대박나자! AFM 실시간 주식 대시보드</h1>
 
+<!-- 사용자 영역 -->
+<div id="user-area">
+  <span id="user-name" style="display:none"></span>
+  <button class="auth-btn" id="btn-open-auth">사용자 등록 / 로그인</button>
+</div>
+
 <div id="market-notice"></div>
+
+<!-- 인증 모달 -->
+<div id="auth-overlay">
+  <div id="auth-modal">
+    <h3>사용자 등록 / 로그인</h3>
+    <input type="text" id="auth-input" placeholder="사용자명 입력" maxlength="20" autocomplete="off" />
+    <div id="auth-error"></div>
+    <div class="auth-actions">
+      <button class="auth-action-btn" id="btn-register">등록</button>
+      <button class="auth-action-btn" id="btn-login">로그인</button>
+      <button class="auth-action-btn auth-btn" id="btn-auth-cancel">취소</button>
+    </div>
+  </div>
+</div>
 
 <!-- MY 종목 -->
 <h2>MY 종목</h2>
@@ -216,12 +290,19 @@
 
 <!-- 야간선물 -->
 <h2>야간선물</h2>
+
 <div class="info-grid">
   <div class="info-card" id="card-KOSPI_NIGHT">
     <div class="info-label">코스피 야간선물<span id="fut-closed" class="closed-badge" style="display:none">휴장</span></div>
     <div class="info-value flat" id="fut-price">-</div>
     <div class="info-sub flat"   id="fut-change">-</div>
   </div>
+</div>
+
+<!-- 종목 데이터 업데이트 -->
+<div id="update-section">
+  <button id="btn-update-stocks">종목데이터 업데이트</button>
+  <span id="update-status"></span>
 </div>
 
 <!-- 종목 추가 모달 -->
@@ -245,8 +326,81 @@
 </div>
 
 <script>
+  // ── 사용자 인증 ────────────────────────────────────────────────────────────
+  let currentUser = null; // { userId, username }
+
+  async function initAuth() {
+    const userId = localStorage.getItem('userId');
+    if (!userId) { showAuthBtn(); return; }
+    try {
+      const res  = await fetch(`/api/auth/me?userId=${userId}`);
+      const data = await res.json();
+      if (data.userId) { setLoggedIn(data); }
+      else             { localStorage.removeItem('userId'); showAuthBtn(); }
+    } catch { showAuthBtn(); }
+  }
+
+  function setLoggedIn(user) {
+    currentUser = user;
+    localStorage.setItem('userId', user.userId);
+    document.getElementById('user-name').innerHTML = `<strong>${escHtml(user.username)}</strong> 님`;
+    document.getElementById('user-name').style.display = 'inline';
+    document.getElementById('btn-open-auth').style.display = 'none';
+    reconnectWS();
+  }
+
+  function showAuthBtn() {
+    document.getElementById('btn-open-auth').style.display = '';
+    document.getElementById('user-name').style.display = 'none';
+  }
+
+  // 인증 모달
+  document.getElementById('btn-open-auth').onclick = () => {
+    document.getElementById('auth-overlay').classList.add('open');
+    document.getElementById('auth-error').textContent = '';
+    setTimeout(() => document.getElementById('auth-input').focus(), 50);
+  };
+  document.getElementById('btn-auth-cancel').onclick = () => {
+    document.getElementById('auth-overlay').classList.remove('open');
+  };
+  document.getElementById('auth-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('auth-overlay').classList.remove('open');
+  });
+
+  async function doAuth(endpoint) {
+    const username = document.getElementById('auth-input').value.trim();
+    if (!username) { document.getElementById('auth-error').textContent = '사용자명을 입력하세요.'; return; }
+    try {
+      const res  = await fetch(`/api/auth/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
+      const data = await res.json();
+      if (data.error) { document.getElementById('auth-error').textContent = data.error; return; }
+      document.getElementById('auth-overlay').classList.remove('open');
+      setLoggedIn(data);
+    } catch { document.getElementById('auth-error').textContent = '서버 오류가 발생했습니다.'; }
+  }
+  document.getElementById('btn-register').onclick = () => doAuth('register');
+  document.getElementById('btn-login').onclick    = () => doAuth('login');
+  document.getElementById('auth-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doAuth('login');
+  });
+
+  // ── 종목 데이터 업데이트 버튼 ────────────────────────────────────────────
+  const btnUpdate    = document.getElementById('btn-update-stocks');
+  const updateStatus = document.getElementById('update-status');
+  btnUpdate.onclick  = async () => {
+    btnUpdate.disabled = true;
+    updateStatus.textContent = '업데이트 시작 중...';
+    try {
+      await fetch('/api/stocks/update', { method: 'POST' });
+      updateStatus.textContent = '다운로드 중... (완료 시 알림)';
+    } catch {
+      updateStatus.textContent = '요청 실패';
+      btnUpdate.disabled = false;
+    }
+  };
+
   // ── WebSocket ──────────────────────────────────────────────────────────────
-  const WS_URL = (() => {
+  const WS_BASE = (() => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}`;
   })();
@@ -254,8 +408,18 @@
   const noticeEl  = document.getElementById('market-notice');
   let ws, retryDelay = 1000;
 
+  function wsUrl() {
+    return currentUser ? `${WS_BASE}?userId=${currentUser.userId}` : WS_BASE;
+  }
+
+  function reconnectWS() {
+    if (ws) { ws.onclose = null; ws.close(); }
+    retryDelay = 1000;
+    connect();
+  }
+
   function connect() {
-    ws = new WebSocket(WS_URL);
+    ws = new WebSocket(wsUrl());
     ws.onopen  = () => { statusEl.className = 'connected'; retryDelay = 1000; };
     ws.onerror = () => { statusEl.className = 'error'; };
     ws.onclose = () => {
@@ -279,10 +443,24 @@
         case 'forex':     updateForex(msg);       break;
         case 'futures':   updateFutures(msg);     break;
         case 'market_closed': noticeEl.textContent = msg.message; noticeEl.style.display = 'block'; break;
+        case 'stock_update_progress':
+          updateStatus.textContent = msg.message.replace('[종목로더] ', '');
+          break;
+        case 'stock_update_done':
+          btnUpdate.disabled = false;
+          if (msg.success) {
+            const s = msg.stats;
+            updateStatus.textContent = `완료: 국내 ${s.domestic}개, 해외 ${s.foreign}개`;
+          } else {
+            updateStatus.textContent = `오류: ${msg.message}`;
+          }
+          break;
       }
     };
   }
-  connect();
+
+  // 페이지 로드 시 인증 확인 후 WS 연결
+  initAuth().then(() => { if (!currentUser) connect(); });
 
   // ── 포맷 ───────────────────────────────────────────────────────────────────
   const calcDir = c => c > 0 ? 'up' : c < 0 ? 'down' : 'flat';
