@@ -92,6 +92,12 @@ async function fetchKisIndexPrices() {
     { code: '1001', key: 'KOSDAQ' },
   ];
 
+  // 장전단일가 등 당일 데이터가 없을 경우를 위해 5일 범위로 조회
+  const kst      = getKstNow();
+  const todayStr = kst.toISOString().slice(0, 10).replace(/-/g, '');
+  const fromDate = new Date(kst.getTime() - 5 * 24 * 3600000);
+  const fromStr  = fromDate.toISOString().slice(0, 10).replace(/-/g, '');
+
   for (const { code, key } of targets) {
     try {
       const res = await axios.get(
@@ -108,8 +114,8 @@ async function fetchKisIndexPrices() {
           params: {
             FID_COND_MRKT_DIV_CODE: 'U',
             FID_INPUT_ISCD:         code,
-            FID_INPUT_DATE_1:       getKstNow().toISOString().slice(0, 10).replace(/-/g, ''),
-            FID_INPUT_DATE_2:       getKstNow().toISOString().slice(0, 10).replace(/-/g, ''),
+            FID_INPUT_DATE_1:       fromStr,
+            FID_INPUT_DATE_2:       todayStr,
             FID_PERIOD_DIV_CODE:    'D',
             FID_ORG_ADJ_PRC:        '0',
           },
@@ -118,12 +124,12 @@ async function fetchKisIndexPrices() {
       );
       if (res.data?.rt_cd !== '0') { console.warn(`[KIS REST] 지수 ${key} 오류:`, res.data?.msg1); continue; }
 
-      // output 또는 output1(객체) 모두 지원
-      const out = res.data?.output ?? res.data?.output1;
+      // output1(단일 객체) 또는 output2(배열, 최신순) 모두 지원
+      const out = res.data?.output ?? res.data?.output1 ?? res.data?.output2?.[0];
       if (!out) continue;
 
       const rawPrice = out.bstp_nmix_prpr ?? out.bstp_index_prpr ?? out.stck_prpr;
-      if (!rawPrice) continue;
+      if (!rawPrice || rawPrice === '0') continue;
       const price      = parseFloat(rawPrice);
       const change     = parseFloat(out.bstp_nmix_prdy_vrss ?? out.bstp_index_prdy_vrss ?? out.prdy_vrss ?? 0);
       const changeRate = parseFloat(out.bstp_nmix_prdy_ctrt ?? out.bstp_index_prdy_ctrt ?? out.prdy_ctrt ?? 0);
