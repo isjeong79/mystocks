@@ -74,22 +74,50 @@ async function fetchGlobalNews() {
 
   if (filtered.length === 0) return [];
 
-  // 최신순 정렬 후 상위 10개만 슬라이싱 → Gemini 입력 토큰 초과 방지
+  // 최신순 정렬 후 상위 5개만 슬라이싱
   const sliced = filtered
     .sort((a, b) => b.datetime - a.datetime)
-    .slice(0, 10);
+    .slice(0, 5);
 
-  // Gemini 단 1회 호출로 배열 전체 번역
-  const translated = await translateWithGemini(sliced);
+  // DB에 이미 저장된 newsId 확인 → 신규 항목만 Gemini 번역
+  const candidateIds = sliced.map(item => `finnhub-${item.id}`);
+  const existing = await News.find(
+    { newsId: { $in: candidateIds } },
+    { newsId: 1, title: 1 }
+  ).lean();
+  const existingMap = new Map(existing.map(n => [n.newsId, n.title]));
 
-  return translated.map(item => ({
-    newsId:    `finnhub-${item.id}`,
-    title:     item.headline_ko || item.headline,
-    source:    item.source || 'Finnhub',
-    url:       item.url || '',
-    track:     'global',
-    timestamp: new Date(item.datetime * 1000),
-  }));
+  const newItems = sliced.filter(item => !existingMap.has(`finnhub-${item.id}`));
+
+  // 신규 항목만 Gemini 번역 (기존 항목은 DB 저장 title 재사용)
+  const translated = newItems.length > 0
+    ? await translateWithGemini(newItems)
+    : [];
+
+  return sliced.map(item => {
+    const id = `finnhub-${item.id}`;
+    if (existingMap.has(id)) {
+      return {
+        newsId:             id,
+        title:              existingMap.get(id),
+        headline_original:  item.headline,
+        source:             item.source || 'Finnhub',
+        url:                item.url || '',
+        track:              'global',
+        timestamp:          new Date(item.datetime * 1000),
+      };
+    }
+    const t = translated.find(d => d.id === item.id) || item;
+    return {
+      newsId:             id,
+      title:              t.headline_ko || item.headline,
+      headline_original:  item.headline,
+      source:             item.source || 'Finnhub',
+      url:                item.url || '',
+      track:              'global',
+      timestamp:          new Date(item.datetime * 1000),
+    };
+  });
 }
 
 // ── Track 1 보조: Gemini 번역 (단 1회 API 호출로 배열 전체 번역) ───────────────

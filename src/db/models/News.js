@@ -7,13 +7,14 @@ const mongoose = require('mongoose');
  * - track: 'global' | 'domestic' | 'disclosure'
  */
 const newsSchema = new mongoose.Schema({
-  newsId:    { type: String, required: true, unique: true },
-  title:     { type: String, required: true },
-  source:    { type: String, required: true },
-  url:       { type: String, default: '' },
-  track:     { type: String, enum: ['global', 'domestic', 'disclosure'], required: true },
-  timestamp: { type: Date, required: true },
-  createdAt: { type: Date, default: Date.now, expires: '2d' },  // TTL 인덱스
+  newsId:             { type: String, required: true, unique: true },
+  title:              { type: String, required: true },
+  headline_original:  { type: String, default: '' },  // 원문 영어 (Gemini 재번역 방지용)
+  source:             { type: String, required: true },
+  url:                { type: String, default: '' },
+  track:              { type: String, enum: ['global', 'domestic', 'disclosure'], required: true },
+  timestamp:          { type: Date, required: true },
+  createdAt:          { type: Date, default: Date.now, expires: '2d' },  // TTL 인덱스
 });
 
 module.exports = mongoose.model('News', newsSchema);
