@@ -16,7 +16,6 @@ const TRACK_LABELS = {
   domestic:    '🇰🇷 국내',
   disclosure:  '📋 공시',
 };
-const TICKER_CHARS_PER_SEC = 12;   // 애니메이션 속도 (글자/초)
 const TICKER_MIN_DURATION  = 30;   // 초
 const TICKER_MAX_DURATION  = 180;  // 초
 const KEEPALIVE_INTERVAL   = 5 * 60 * 1000; // 5분
@@ -93,7 +92,7 @@ export function renderNewsTicker(items) {
 export function showTickerLoading() {
   const track = document.getElementById('news-ticker-track');
   if (track) track.innerHTML =
-    '<span class="ticker-set"><span class="ticker-item ticker-loading">뉴스를 불러오는 중...</span></span>';
+    '<span class="ticker-set"><span class="ticker-item ticker-loading">글로벌 뉴스 불러오는 중...</span></span>';
 }
 
 // ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
