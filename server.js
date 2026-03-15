@@ -217,7 +217,8 @@ async function main() {
       await fetchKisIndexPrices();
     }
 
-    await refreshHolidays();
+    // 공휴일 로드는 백그라운드 실행 (API 수십 건 → await 시 KIS 연결·상태 인터벌 블록)
+    refreshHolidays().catch(e => console.error('[공휴일] 초기 로드 실패:', e.message));
     setInterval(refreshHolidays, 24 * 60 * 60 * 1000);
 
     await fetchInitialForeignPrices(allItems);

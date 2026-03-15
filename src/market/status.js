@@ -27,7 +27,8 @@ function getDomesticStatus() {
   if (dow === 0 || dow === 6 || holiday) return { status: 'closed', label: '휴장',     color: 'flat' };
 
   const hm = kst.getHours() * 60 + kst.getMinutes();
-  if (hm >= 8*60+30 && hm < 9*60)     return { status: 'pre',    label: '동시호가', color: 'warn' };
+  if (hm >= 7*60+30 && hm < 8*60+30)  return { status: 'pre',    label: '장전단일가', color: 'warn' };
+  if (hm >= 8*60+30 && hm < 9*60)     return { status: 'pre',    label: '동시호가',  color: 'warn' };
   if (hm >= 9*60    && hm < 15*60+30) return { status: 'open',   label: '정규장',   color: 'up'   };
   if (hm >= 15*60+30 && hm < 16*60)  return { status: 'after',  label: '시간외',   color: 'warn' };
   if (hm >= 16*60    && hm < 17*60)  return { status: 'single', label: '단일가',   color: 'warn' };
