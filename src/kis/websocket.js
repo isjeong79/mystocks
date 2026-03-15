@@ -7,6 +7,7 @@ const state     = require('../state');
 const broadcast = require('../broadcast');
 
 let kisWs = null;
+let _reissuingKey = false; // approvalKey 재발급 중 중복 호출 방지
 
 function subMsg(trId, trKey) {
   return JSON.stringify({
@@ -66,11 +67,14 @@ function connectKis(getWatchlistItems) {
         if (trId === 'PINGPONG') {
           kisWs.send(text);
         } else if (json.body?.msg_cd === 'OPSP0011') {
-          // approvalKey 만료 → 재발급 후 재연결
+          // approvalKey 만료 — 중복 재발급 방지 후 1회만 처리
+          if (_reissuingKey) return;
+          _reissuingKey = true;
           console.warn('[KIS WS] approvalKey 만료 → 재발급 후 재연결');
           fetchApprovalKey()
             .then(() => { if (kisWs?.readyState === WebSocket.OPEN) kisWs.close(); })
-            .catch(e => console.error('[KIS WS] approvalKey 재발급 실패:', e.message));
+            .catch(e => console.error('[KIS WS] approvalKey 재발급 실패:', e.message))
+            .finally(() => { _reissuingKey = false; });
         } else {
           console.log(`[KIS WS JSON] tr_id=${trId}`, JSON.stringify(json.body ?? json).substring(0, 250));
         }
