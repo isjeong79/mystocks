@@ -43,7 +43,7 @@
 
 /* ── 삭제 버튼 ───────────────────────────────────────────────────────── */
 .remove-btn {
-  position: absolute; top: 6px; right: 6px;
+  position: absolute; top: 7px; right: 6px;
   background: none; border: none; color: var(--muted); cursor: pointer;
   font-size: 11px; width: 22px; height: 22px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;

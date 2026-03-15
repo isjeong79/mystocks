@@ -150,10 +150,17 @@ function _renderResults(results) {
 }
 
 function _adjustForKeyboard() {
-  if (!window.visualViewport || window.innerWidth > 500) return;
+  if (!window.visualViewport) return;
   const overlay = document.getElementById('modal-overlay');
   if (!overlay.classList.contains('open')) return;
   const vv        = window.visualViewport;
   const keyboardH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-  document.getElementById('modal').style.marginBottom = keyboardH > 10 ? keyboardH + 'px' : '';
+  const modal     = document.getElementById('modal');
+  if (keyboardH > 10) {
+    modal.style.maxHeight = Math.floor(vv.height * 0.92) + 'px';
+    modal.style.marginBottom = (window.innerWidth <= 500) ? keyboardH + 'px' : '';
+  } else {
+    modal.style.maxHeight = '';
+    modal.style.marginBottom = '';
+  }
 }
