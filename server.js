@@ -145,6 +145,9 @@ const server = http.createServer(async (req, res) => {
 const clientWss = new WebSocket.Server({ server });
 broadcast.init(clientWss);
 
+// 마지막 수집 뉴스 캐시 (새 접속자에게 즉시 전송)
+let lastNewsItems = [];
+
 clientWss.on('connection', async (ws, req) => {
   // userId는 WS URL 쿼리스트링으로 전달: ws://host?userId=xxx
   const qs     = url.parse(req.url, true).query;
@@ -154,6 +157,11 @@ clientWss.on('connection', async (ws, req) => {
 
   const userItems  = await watchlist.getWatchlistForUser(userId);
   ws.send(JSON.stringify({ type: 'init', state, watchlist: watchlist.buildWithPrices(userItems), marketStatus: getAllMarketStatus() }));
+
+  // 캐시된 뉴스가 있으면 접속 즉시 전송 (2분 인터벌 기다릴 필요 없음)
+  if (lastNewsItems.length > 0) {
+    ws.send(JSON.stringify({ type: 'news_ticker', items: lastNewsItems }));
+  }
 
   ws.on('message', async data => {
     try {
@@ -246,11 +254,12 @@ async function main() {
     // 5. 종목 DB 확인 (백그라운드)
     ensureStocksLoaded().catch(e => console.error('[종목로더]', e.message));
 
-    // 6. 뉴스 수집: 서버 시작 후 30초 뒤 첫 실행, 이후 2분 주기
+    // 6. 뉴스 수집: 즉시 첫 실행, 이후 2분 주기
     const runNewsAggregator = async () => {
       try {
         const items = await aggregateAndSave();
         if (items.length > 0) {
+          lastNewsItems = items;  // 캐시 갱신
           broadcast.broadcast({ type: 'news_ticker', items });
           console.log(`[News] 브로드캐스트: ${items.length}건`);
         }
@@ -258,10 +267,8 @@ async function main() {
         console.error('[News] 수집 오류:', e.message);
       }
     };
-    setTimeout(() => {
-      runNewsAggregator();
-      setInterval(runNewsAggregator, 2 * 60 * 1000); // 2분 주기
-    }, 30_000);
+    runNewsAggregator();
+    setInterval(runNewsAggregator, 2 * 60 * 1000); // 2분 주기
   });
 }
 
