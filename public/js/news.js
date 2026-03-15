@@ -29,6 +29,23 @@ export function startKeepalive() {
   }, KEEPALIVE_INTERVAL);
 }
 
+// ── 탭 전환 후 애니메이션 복구 ────────────────────────────────────────────────
+
+export function startVisibilityFix() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const track = document.getElementById('news-ticker-track');
+    if (!track) return;
+    // animation이 실제로 동작 중인 경우에만 재시작 (loading 상태 제외)
+    const current = track.style.animationDuration;
+    if (!current) return;
+    track.style.animation = 'none';
+    void track.offsetWidth;
+    track.style.animation = '';
+    track.style.animationDuration = current;
+  });
+}
+
 // ── 렌더링 ────────────────────────────────────────────────────────────────────
 
 /**

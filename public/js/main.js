@@ -124,6 +124,7 @@ MarketFloat.init();
 
 News.showTickerLoading();
 News.startKeepalive();
+News.startVisibilityFix();
 
 Auth.init({
   reconnectWS: WS.reconnect,
