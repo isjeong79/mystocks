@@ -45,8 +45,11 @@ export function openAuthModal() {
 }
 
 export function closeAuthModal() {
+  const overlay = document.getElementById('auth-overlay');
   document.getElementById('auth-input').blur();
-  document.getElementById('auth-overlay').classList.remove('open');
+  overlay.classList.add('closing');
+  overlay.classList.remove('open');
+  setTimeout(() => overlay.classList.remove('closing'), 180);
 }
 
 export function doLogout() {

@@ -25,10 +25,14 @@ h1 {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 h1 > span:not(#status) { flex: 1; }
+@keyframes buddha-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(251,191,36,0.2)); }
+  50%       { filter: drop-shadow(0 0 8px rgba(251,191,36,0.9)) drop-shadow(0 0 16px rgba(251,146,0,0.4)); }
+}
 #buddha-icon {
   width: 28px; height: 28px; object-fit: contain;
   flex-shrink: 0; margin-left: 2px;
-  filter: drop-shadow(0 0 4px rgba(251,191,36,0.5));
+  animation: buddha-glow 3s ease-in-out infinite;
 }
 
 #status {
