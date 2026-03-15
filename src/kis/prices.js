@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { APP_KEY, APP_SECRET, REST_BASE } = require('../config');
 const { getAccessToken } = require('./auth');
+const { getUsMarketSession, SESSION_MARKET_MAP } = require('./session');
 const { signToDir, delay, getKstNow } = require('../utils');
 const state     = require('../state');
 const broadcast = require('../broadcast');
@@ -51,7 +52,7 @@ async function fetchKisForeignPrice(market, symbol) {
         tr_id:           'HHDFS00000300',
         custtype:        'P',
       },
-      params: { AUTH: '', EXCD: market, SYMB: symbol },
+      params: { AUTH: '', EXCD: SESSION_MARKET_MAP[market]?.[getUsMarketSession()]?.[1] ?? market, SYMB: symbol },
       timeout: 8000,
     }
   );

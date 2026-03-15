@@ -30,30 +30,10 @@ function kisMarket(yahooExchange, symbol) {
 }
 
 function getUsMarketSession() {
-  const now = new Date();
   const kst = getKstNow();
   const hm  = kst.getHours() * 60 + kst.getMinutes();
-
-  const y = now.getUTCFullYear();
-  const dstStart = (() => {
-    let d = new Date(Date.UTC(y, 2, 1)), cnt = 0;
-    while (cnt < 2) { if (d.getUTCDay() === 0) cnt++; if (cnt < 2) d.setUTCDate(d.getUTCDate() + 1); }
-    return new Date(d.getTime() + 7 * 3600000);
-  })();
-  const dstEnd = (() => {
-    let d = new Date(Date.UTC(y, 10, 1));
-    while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() + 1);
-    return new Date(d.getTime() + 6 * 3600000);
-  })();
-  const isDST = now >= dstStart && now < dstEnd;
-
-  const nightOpen  = isDST ? 22 * 60 + 30 : 23 * 60 + 30;
-  const nightClose = isDST ?  5 * 60      :  6 * 60;
-  const dayOpen    = isDST ? 17 * 60      : 18 * 60;
-
-  if (hm >= nightOpen || hm < nightClose) return 'night';
-  if (hm >= dayOpen)                      return 'day';
-  return 'night';
+  // KST 09:00~17:00 → 주간(대체거래소), 그 외 → 야간(프리/정규/애프터 포함)
+  return (hm >= 9 * 60 && hm < 17 * 60) ? 'day' : 'night';
 }
 
 function foreignTrKey(market, symbol) {

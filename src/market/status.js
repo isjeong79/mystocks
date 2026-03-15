@@ -48,21 +48,17 @@ function getUsStatus() {
   const regClose   = dst ? 5*60     : 6*60;     // 05:00 or 06:00 KST (다음날)
   const afterClose = 9*60;                       // 09:00 KST
 
-  // 현재 ET 현지 날짜 (공휴일 체크용)
-  const etOffsetMs = dst ? -4 * 3600000 : -5 * 3600000;
-  const etNow      = new Date(Date.now() + etOffsetMs);
-
   // 일요일: 항상 휴장
   if (dow === 0) return { status: 'closed', label: '휴장', color: 'flat' };
 
   // 토요일: 자정~regClose는 금요일 정규장 연속, 이후 애프터 or 휴장
   if (dow === 6) {
     if (hm < regClose) {
-      if (isUsHoliday(etNow)) return { status: 'closed', label: '휴장', color: 'flat' };
+      if (isUsHoliday()) return { status: 'closed', label: '휴장', color: 'flat' };
       return { status: 'open',  label: '정규장', color: 'up'   };
     }
     if (hm < afterClose) {
-      if (isUsHoliday(etNow)) return { status: 'closed', label: '휴장', color: 'flat' };
+      if (isUsHoliday()) return { status: 'closed', label: '휴장', color: 'flat' };
       return { status: 'after', label: '애프터', color: 'warn' };
     }
     return { status: 'closed', label: '휴장', color: 'flat' };
@@ -75,7 +71,7 @@ function getUsStatus() {
   if (dow === 5 && hm >= afterClose && hm < preOpen) return { status: 'closed', label: '휴장', color: 'flat' };
 
   // 미국 공휴일 체크 (평일 거래 구간)
-  if (isUsHoliday(etNow)) return { status: 'closed', label: '휴장', color: 'flat' };
+  if (isUsHoliday()) return { status: 'closed', label: '휴장', color: 'flat' };
 
   // 평일 일반 로직
   if (hm >= regOpen || hm < regClose)    return { status: 'open',  label: '정규장',   color: 'up'   };

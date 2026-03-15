@@ -122,12 +122,13 @@ function isKstHoliday(kstDate) {
   return _kr.has(`${y}${m}${d}`);
 }
 
-/** etDate: Date 객체 (UTC 기준의 ET 현지시각) */
-function isUsHoliday(etDate) {
-  const y = etDate.getUTCFullYear();
-  const m = String(etDate.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(etDate.getUTCDate()).padStart(2, '0');
-  return _us.has(`${y}${m}${d}`);
+/** 현재 America/New_York 날짜 기준으로 미국 휴장일 여부 반환 */
+function isUsHoliday() {
+  const nyDateStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return _us.has(nyDateStr.replace(/-/g, ''));
 }
 
 // ── 야간선물 ──────────────────────────────────────────────────────────────────
