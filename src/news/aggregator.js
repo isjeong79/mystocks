@@ -49,6 +49,19 @@ const RSS_TIMEOUT     = 10_000;
 const MAX_NEWS_AGE_MS = 4 * 60 * 60 * 1000;  // 4시간
 const GLOBAL_MAX      = 12;                    // 번역 전 최대 해외 뉴스 수
 const DUP_PREFIX_LEN  = 15;                    // 중복 판정 prefix 길이 (자)
+const BROADCAST_MAX   = 50;                    // 티커 브로드캐스트 최대 건수
+
+// 머니투데이 종합피드 경제/증권 키워드 필터 (비관련 뉴스 제외)
+const MT_KEYWORDS = [
+  '주식', '증시', '코스피', '코스닥', '펀드', '채권', '금리', '환율', '달러',
+  '수출', '수입', '무역', '관세', '반도체', '배터리', '이차전지', '바이오',
+  '상장', '공모', '실적', '영업이익', '매출', '투자', '인수', '합병', 'M&A',
+  '원자력', '전력', '에너지', 'IPO', '스타트업', '벤처', 'AI', '인공지능',
+  '부동산', '금융', '은행', '보험', '증권', '자산', '경제', '물가', '인플레',
+  '한국은행', '기준금리', '연준', '연방', 'Fed', '나스닥', 'S&P',
+  '삼성', 'SK', 'LG', '현대', '카카오', '네이버', '셀트리온', '포스코',
+];
+const MT_KEYWORD_RE = new RegExp(MT_KEYWORDS.join('|'), 'i');
 
 // Finnhub 전용 키워드 필터 (일반 뉴스 중 금융/거시 관련만 추출)
 const GLOBAL_KEYWORDS = [
@@ -314,7 +327,7 @@ async function fetchDomesticNews() {
     safeRssFetch('매일경제',     () => rssParser.parseURL(RSS.MK_STOCK),        EMPTY_FEED),
   ]);
 
-  const parseFeedItems = (feed, prefix, sourceName) =>
+  const parseFeedItems = (feed, prefix, sourceName, keywordRe = null) =>
     (feed.items ?? [])
       .filter(item => new Date(item.pubDate || 0) >= cutoff)
       .map(item => ({
@@ -325,7 +338,8 @@ async function fetchDomesticNews() {
         track:     'domestic',
         timestamp: new Date(item.pubDate || Date.now()),
       }))
-      .filter(n => n.title.length > 5);
+      .filter(n => n.title.length > 5)
+      .filter(n => !keywordRe || keywordRe.test(n.title));
 
   // 구글뉴스: pubDate 없는 항목은 Invalid Date → cutoff 비교 false → 자동 제외
   // track: 'domestic' 고정 → fetchGlobalNews와 완전 분리 → DeepL 호출 없음
@@ -349,7 +363,7 @@ async function fetchDomesticNews() {
     ...googleItems,
     ...parseFeedItems(newspimEcoFeed, 'newspim-eco', '뉴스핌'),
     ...parseFeedItems(newspimFinFeed, 'newspim-fin', '뉴스핌'),
-    ...parseFeedItems(mtFeed,         'mt',          '머니투데이'),
+    ...parseFeedItems(mtFeed,         'mt',          '머니투데이', MT_KEYWORD_RE),
     ...parseFeedItems(mkFeed,         'mk',          '매일경제'),
   ].sort((a, b) => b.timestamp - a.timestamp);
 }
@@ -440,10 +454,17 @@ async function aggregateAndSave() {
     }
   }
 
-  // timestamp 내림차순, 최신 30건 브로드캐스트
-  return deduped
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 30);
+  // DB에 누적된 최근 4시간 기사를 반환 → 매 사이클마다 새 기사가 쌓여 티커가 풍성해짐
+  // (현재 사이클 결과만 반환하면 RSS 업데이트 없을 시 같은 기사가 반복됨)
+  const cutoffDate = new Date(Date.now() - MAX_NEWS_AGE_MS);
+  const recent = await News.find(
+    { timestamp: { $gte: cutoffDate } },
+    { newsId: 1, title: 1, source: 1, url: 1, track: 1, timestamp: 1 }
+  ).sort({ timestamp: -1 }).limit(BROADCAST_MAX * 2).lean();
+
+  // 제목 prefix 중복 제거 후 상위 BROADCAST_MAX 건
+  return deduplicateByPrefix(recent, 'title')
+    .slice(0, BROADCAST_MAX);
 }
 
 module.exports = { aggregateAndSave };

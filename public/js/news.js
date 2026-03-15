@@ -71,7 +71,7 @@ export function renderNewsTicker(items) {
 
   // 고정 속도 40px/s — animation 단축속성 전체를 인라인으로 세팅해
   // CSS 파일의 60s 기본값이 덮어씌우는 문제 방지
-  const SPEED_PX_PER_SEC = 40;
+  const SPEED_PX_PER_SEC = 50;
   const duration = Math.max(TICKER_MIN_DURATION, setWidth / SPEED_PX_PER_SEC);
   void track.offsetWidth;  // reflow → 애니메이션 재시작 트리거
   track.style.animation = `ticker-scroll ${duration}s linear infinite`;
