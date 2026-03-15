@@ -1,7 +1,7 @@
 /**
  * 3-Track 뉴스 통합 모듈
  *
- * Track 1 – 해외 거시/주도주  : Finnhub → 키워드 필터 → Gemini 번역
+ * Track 1 – 해외 거시/주도주  : Finnhub → 키워드 필터 → DeepL 번역
  * Track 2 – 국내 거시          : Google News RSS (한국어)
  * Track 3 – 국내 공시/시황     : 연합뉴스 경제 RSS
  *
@@ -18,29 +18,31 @@ const News      = require('../db/models/News');
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
 const FINNHUB_BASE   = 'https://finnhub.io/api/v1';
-const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL   = 'gemini-2.0-flash';   // 2026년 기준 무료 최신 모델
+// 무료 플랜 키는 :fx 로 끝남 → api-free.deepl.com 사용
+// 유료 플랜이라면 api.deepl.com 으로 변경
+const DEEPL_BASE     = 'https://api-free.deepl.com/v2';
+const DEEPL_TIMEOUT  = 15_000;
 // 한글 쿼리를 encodeURIComponent로 인코딩 (unescaped characters 에러 방지)
 const GOOGLE_NEWS_RSS =
   'https://news.google.com/rss/search?q=' +
   encodeURIComponent('코스피 OR 한국은행 OR 금융위 OR 기준금리 OR 코스닥') +
   '&hl=ko&gl=KR&ceid=KR:ko';
-// Track 3: 연합뉴스 경제 RSS (KIS 뉴스 API 미지원으로 대체)
+// Track 3: 연합뉴스 경제 RSS
 const YONHAP_ECONOMY_RSS = 'https://www.yna.co.kr/rss/economy.xml';
-const RSS_TIMEOUT    = 10_000;   // ms
-const GEMINI_TIMEOUT = 20_000;
+const RSS_TIMEOUT    = 10_000;
 const MAX_NEWS_AGE_MS = 4 * 60 * 60 * 1000; // 4시간 이내 뉴스만 처리
 
 /**
  * Finnhub 키워드 필터
- * 미국 시총 상위 20대 기술주, 주요 거시경제 지표, 지정학적 리스크 등 30개+
+ * 미국 시총 상위 20대 기술주, 주요 거시경제 지표, 지정학적 리스크 등
  */
 const GLOBAL_KEYWORDS = [
   // 연준 / 금리
   'Fed', 'Federal Reserve', 'FOMC', 'Powell', 'rate cut', 'rate hike',
   'interest rate', 'CPI', 'inflation', 'GDP', 'recession', 'yield',
   // 지정학
-  'War', 'Ukraine', 'Russia', 'Israel', 'Gaza', 'Taiwan', 'sanctions', 'tariff',
+  'War', 'Ukraine', 'Russia', 'Israel', 'Gaza', 'Taiwan', 'Iran',
+  'sanctions', 'tariff',
   // 미국 시총 상위 기술주
   'Apple', 'Microsoft', 'Nvidia', 'Amazon', 'Alphabet', 'Google', 'Meta',
   'Tesla', 'Broadcom', 'TSMC', 'AMD', 'Netflix', 'Eli Lilly',
@@ -54,9 +56,6 @@ const GLOBAL_KEYWORDS = [
 const KEYWORD_RE = new RegExp(GLOBAL_KEYWORDS.join('|'), 'i');
 
 const rssParser = new RSSParser({ timeout: RSS_TIMEOUT });
-
-// Gemini 429 발생 시 쿨다운 타임스탬프 (프로세스 메모리)
-let _geminiCooldownUntil = 0;
 
 // ── Track 1: Finnhub 해외 뉴스 ───────────────────────────────────────────────
 
@@ -82,132 +81,90 @@ async function fetchGlobalNews() {
     .sort((a, b) => b.datetime - a.datetime)
     .slice(0, 5);
 
-  // DB 조회: 이미 저장된 항목 확인
+  // DB 조회: 번역 성공 항목만 캐시 재사용
+  // (headline_original 없거나 title === headline_original 인 항목은 재번역)
   const candidateIds = sliced.map(item => `finnhub-${item.id}`);
   const existing = await News.find(
     { newsId: { $in: candidateIds } },
     { newsId: 1, title: 1, headline_original: 1 }
   ).lean();
 
-  // 번역 성공 항목만 캐시 재사용:
-  //   headline_original이 설정되어 있고 title과 다른 경우 = 실제 번역됨
   const existingMap = new Map(
     existing
       .filter(n => n.headline_original && n.title !== n.headline_original)
       .map(n => [n.newsId, n.title])
   );
-  // 재번역 대상:
-  //   1) headline_original 미설정 (headline_original 필드 추가 이전 저장 레코드)
-  //   2) title === headline_original (이전 사이클에서 번역 실패 후 저장)
-  const failedIds = new Set(
-    existing
-      .filter(n => !n.headline_original || n.title === n.headline_original)
-      .map(n => n.newsId)
-  );
 
-  // 신규 항목 + 번역 실패 항목(쿨다운 해제 시만) → Gemini 번역 대상
-  const inCooldown = Date.now() < _geminiCooldownUntil;
-  const newItems = sliced.filter(item => {
-    const id = `finnhub-${item.id}`;
-    if (!existingMap.has(id) && !failedIds.has(id)) return true;  // 진짜 신규
-    if (failedIds.has(id) && !inCooldown) return true;            // 실패 재시도 (쿨다운 해제 시)
-    return false;
-  });
+  // 신규 + 번역 미완료 항목 → DeepL 번역
+  const newItems = sliced.filter(item => !existingMap.has(`finnhub-${item.id}`));
 
-  // Gemini 번역 (쿨다운 체크는 translateWithGemini 내부에서도 수행)
-  const translated = newItems.length > 0
-    ? await translateWithGemini(newItems)
-    : [];
+  let translatedTitles = null;
+  if (newItems.length > 0) {
+    translatedTitles = await translateWithDeepL(newItems.map(i => i.headline));
+  }
 
   return sliced.map(item => {
     const id = `finnhub-${item.id}`;
-    // 번역 성공 캐시: 바로 반환
-    if (existingMap.has(id) && !failedIds.has(id)) {
+
+    // 번역 성공 캐시
+    if (existingMap.has(id)) {
       return {
-        newsId:             id,
-        title:              existingMap.get(id),
-        headline_original:  item.headline,
-        source:             item.source || 'Finnhub',
-        url:                item.url || '',
-        track:              'global',
-        timestamp:          new Date(item.datetime * 1000),
+        newsId:            id,
+        title:             existingMap.get(id),
+        headline_original: item.headline,
+        source:            item.source || 'Finnhub',
+        url:               item.url || '',
+        track:             'global',
+        timestamp:         new Date(item.datetime * 1000),
       };
     }
-    // 신규 or 번역 실패 재시도: Gemini 결과 사용
-    const t = translated.find(d => d.id === item.id) || item;
+
+    // 신규 or 재번역 항목: DeepL 결과 적용 (인덱스 순서 일치)
+    const idx = newItems.findIndex(n => n.id === item.id);
+    const title = (translatedTitles && idx >= 0 && translatedTitles[idx])
+      ? translatedTitles[idx]
+      : item.headline;
+
     return {
-      newsId:             id,
-      title:              t.headline_ko || item.headline,
-      headline_original:  item.headline,
-      source:             item.source || 'Finnhub',
-      url:                item.url || '',
-      track:              'global',
-      timestamp:          new Date(item.datetime * 1000),
+      newsId:            id,
+      title,
+      headline_original: item.headline,
+      source:            item.source || 'Finnhub',
+      url:               item.url || '',
+      track:             'global',
+      timestamp:         new Date(item.datetime * 1000),
     };
   });
 }
 
-// ── Track 1 보조: Gemini 번역 (단 1회 API 호출로 배열 전체 번역) ───────────────
+// ── Track 1 보조: DeepL 번역 ──────────────────────────────────────────────────
 
 /**
- * Finnhub 뉴스 배열을 받아 headline 필드를 한국어로 번역 후 동일 구조로 반환
- * 1 RPM 소모 → 2분 수집 주기에서 429 완전 회피
+ * 헤드라인 문자열 배열을 DeepL로 한국어 번역 후 번역문 배열 반환
+ * 실패 시 null 반환 → 호출부에서 원문 폴백 처리
  */
-async function translateWithGemini(items) {
-  const apiKey = process.env.GEMINI_API_KEY;
+async function translateWithDeepL(headlines) {
+  const apiKey = process.env.DEEPL_API_KEY;
   if (!apiKey) {
-    console.warn('[News] GEMINI_API_KEY 미설정 → 원문 사용');
-    return items;
+    console.warn('[News] DEEPL_API_KEY 미설정 → 원문 사용');
+    return null;
   }
-
-  // 429 쿨다운 중이면 Gemini 호출 스킵
-  if (Date.now() < _geminiCooldownUntil) {
-    const mins = Math.ceil((_geminiCooldownUntil - Date.now()) / 60000);
-    console.warn(`[News] Gemini 쿨다운 중 (${mins}분 남음) → 원문 사용`);
-    return items;
-  }
-
-  // headline 필드만 번역 요청 (원본 구조 그대로 반환)
-  const prompt =
-    '아래 JSON 배열에서 headline 값만 한국어로 번역한 뒤, ' +
-    '원래와 똑같은 구조의 JSON 배열로 리턴해 줘. ' +
-    '번역된 필드명은 headline_ko로 추가하고, 나머지 필드는 그대로 유지해. ' +
-    '코드블록, 설명 없이 순수 JSON 배열만 응답.\n' +
-    JSON.stringify(items.map(i => ({ id: i.id, headline: i.headline })));
 
   try {
     const res = await axios.post(
-      `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      { contents: [{ parts: [{ text: prompt }] }] },
-      { timeout: GEMINI_TIMEOUT },
+      `${DEEPL_BASE}/translate`,
+      { text: headlines, target_lang: 'KO' },
+      {
+        headers: { Authorization: `DeepL-Auth-Key ${apiKey}` },
+        timeout: DEEPL_TIMEOUT,
+      }
     );
-    const raw   = res.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
-    // greedy 매칭: 배열 전체를 정확히 캡처 (non-greedy *? 는 첫 ] 에서 잘림)
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) {
-      console.warn('[News] Gemini 응답 JSON 파싱 실패, 원문:\n', raw.slice(0, 200));
-      return items;
-    }
-
-    const translated = JSON.parse(match[0]);
-    if (!Array.isArray(translated)) return items;
-
-    // id 기준으로 원본과 병합
-    const map = new Map(translated.map(t => [String(t.id), t.headline_ko]));
-    const result = items.map(item => ({
-      ...item,
-      headline_ko: map.get(String(item.id)) || item.headline,
-    }));
-    console.log(`[News] Gemini 번역 완료: ${result.filter(r => r.headline_ko !== r.headline).length}/${items.length}건`);
-    return result;
+    const translated = res.data?.translations?.map(t => t.text) ?? null;
+    console.log(`[News] DeepL 번역 완료: ${translated?.length ?? 0}건`);
+    return translated;
   } catch (e) {
-    if (e.response?.status === 429) {
-      _geminiCooldownUntil = Date.now() + 2 * 60 * 1000; // 2분 쿨다운 (RPM 초기화 주기)
-      console.warn('[News] Gemini 429 → 2분 쿨다운 설정');
-    } else {
-      console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
-    }
-    return items;
+    console.warn('[News] DeepL 번역 실패, 원문 사용:', e.response?.status, e.message);
+    return null;
   }
 }
 
@@ -292,8 +249,7 @@ async function aggregateAndSave() {
   const unique = [...new Map(all.map(n => [n.newsId, n])).values()];
 
   // 번역 실패한 global 뉴스는 DB 저장 제외
-  // → 다음 주기에 다시 신규로 인식되어 Gemini 재시도
-  // → 영문 제목이 DB에 영구 저장되는 것 방지
+  // → 다음 주기에 다시 신규로 인식되어 DeepL 재시도
   const toSave = unique.filter(n =>
     n.track !== 'global' ||
     !n.headline_original ||
@@ -301,25 +257,11 @@ async function aggregateAndSave() {
   );
 
   // insertMany with ordered:false → 중복 키 에러 무시, 나머지 삽입
-  let inserted = [];
   try {
-    const result = await News.insertMany(toSave, { ordered: false, rawResult: true });
-    // 삽입된 newsId 목록으로 실제 신규 항목 추출
-    const insertedIds = new Set(
-      (result.insertedIds ? Object.values(result.insertedIds).map(id => id.toString()) : [])
-    );
-    inserted = unique.filter((_, i) =>
-      result.insertedIds && insertedIds.has(
-        Object.values(result.insertedIds)[Object.keys(result.insertedIds).indexOf(String(i))]?.toString()
-      )
-    );
-    // rawResult가 복잡할 경우 fallback: 전체 unique 반환 (중복은 위에서 이미 걸렀으므로 거의 다 신규)
-    if (inserted.length === 0 && result.insertedCount > 0) inserted = unique;
-    console.log(`[News] DB insert: ${result.insertedCount}건 신규`);
+    const result = await News.insertMany(toSave, { ordered: false });
+    console.log(`[News] DB insert: ${result.length}건 신규`);
   } catch (e) {
-    // BulkWriteError: 일부 duplicate key 에러 포함 가능 → 성공분만 사용
     if (e.name === 'MongoBulkWriteError' || e.code === 11000) {
-      inserted = unique; // 화면 표시용으로 unique 전체 사용 (중복은 이미 DB에 있는 것)
       console.log(`[News] DB insert (일부 중복 포함): ${e.result?.nInserted ?? '?'}건 신규`);
     } else {
       console.error('[News] DB insert 실패:', e.message);
@@ -327,10 +269,10 @@ async function aggregateAndSave() {
     }
   }
 
-  // timestamp 내림차순 정렬
+  // timestamp 내림차순 정렬, 최신 30건만 브로드캐스트
   return unique
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 30); // 브로드캐스트는 최신 30건만
+    .slice(0, 30);
 }
 
 module.exports = { aggregateAndSave };
