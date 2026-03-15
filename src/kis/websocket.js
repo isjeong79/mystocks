@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const { KIS_WS_URL } = require('../config');
 const { getApprovalKey, fetchApprovalKey } = require('./auth');
 const { getUsMarketSession, foreignTrKey } = require('./session');
+const { getDomesticStatus } = require('../market/status');
 const { signToDir } = require('../utils');
 const state     = require('../state');
 const broadcast = require('../broadcast');
@@ -41,11 +42,13 @@ function connectKis(getWatchlistItems) {
   kisWs.on('open', () => {
     console.log('[KIS WS] 연결');
     const items = getWatchlistItems();
-    items.filter(w => w.type === 'domestic').forEach(w => {
-      kisWs.send(subMsg('H0STCNT0', w.code)); // KRX 정규장 체결
-      kisWs.send(subMsg('H1STCNT0', w.code)); // NXT 프리마켓 체결 (08:00~08:50)
-      kisWs.send(subMsg('H0STASP0', w.code)); // 호가/예상체결가 (동시호가 구간)
-    });
+    const ds = getDomesticStatus().status;
+    // 구독 한도(40개) 방어: 시장 상태에 따라 종목당 TR 1개만 구독
+    const domTrId = (ds === 'pre')                                          ? 'H1STCNT0'  // NXT 프리마켓
+                  : (ds === 'opening_auction' || ds === 'closing_auction')  ? 'H0STASP0'  // 동시호가 예상체결가
+                  :                                                           'H0STCNT0'; // 정규장 및 기타
+    console.log(`[KIS WS] 국내종목 구독 TR: ${domTrId} (상태: ${ds})`);
+    items.filter(w => w.type === 'domestic').forEach(w => kisWs.send(subMsg(domTrId, w.code)));
     items.filter(w => w.type === 'foreign').forEach(w => {
       const trKey = foreignTrKey(w.market ?? 'NAS', w.symbol);
       console.log(`[KIS WS] 해외주식 구독: HDFSCNT0 ${trKey}`);
@@ -158,13 +161,24 @@ function connectKis(getWatchlistItems) {
 }
 
 let _lastUsSession = null;
+let _lastDomStatus = null;
 function startSessionMonitor(getWatchlistItems) {
   _lastUsSession = getUsMarketSession();
+  _lastDomStatus = getDomesticStatus().status;
   setInterval(() => {
+    // 미국 세션 전환 감시
     const session = getUsMarketSession();
     if (_lastUsSession !== session) {
-      console.log(`[세션전환] ${_lastUsSession} → ${session} | KIS WebSocket 재연결`);
+      console.log(`[세션전환] US ${_lastUsSession} → ${session} | KIS WS 재연결`);
       _lastUsSession = session;
+      if (kisWs?.readyState === WebSocket.OPEN) kisWs.close();
+      return;
+    }
+    // 국내 시장 상태 전환 감시 (TR 변경 필요 구간: pre/auction/open 경계)
+    const domStatus = getDomesticStatus().status;
+    if (_lastDomStatus !== domStatus) {
+      console.log(`[세션전환] KR ${_lastDomStatus} → ${domStatus} | KIS WS 재연결`);
+      _lastDomStatus = domStatus;
       if (kisWs?.readyState === WebSocket.OPEN) kisWs.close();
     }
   }, 60000);
