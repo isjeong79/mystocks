@@ -24,10 +24,10 @@
 .stock-card:has(.stock-price.down):hover { border-color: rgba(96,165,250,0.5); }
 
 .stock-name {
-  font-size: 0.72rem; font-weight: 600; color: #a8bdd0; margin-bottom: 3px;
+  font-size: 0.8rem; font-weight: 600; color: #a8bdd0; margin-bottom: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   padding-right: 16px; line-height: 1.2;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.01em; margin-bottom: 6px;
 }
 .stock-price {
   font-size: 1.05rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
@@ -100,6 +100,18 @@
 .info-card:has(.info-value.up)   { border-color: rgba(248,113,113,0.28); }
 .info-card:has(.info-value.down) { border-color: rgba(96,165,250,0.28); }
 
-.info-label { font-size: 0.69rem; color: var(--muted); margin-bottom: 5px; }
-.info-value { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; }
-.info-sub   { font-size: 0.69rem; margin-top: 3px; }
+.info-label {
+  font-size: 0.8rem; font-weight: 600; color: #a8bdd0;
+  margin-bottom: 6px; line-height: 1.2; letter-spacing: -0.01em;
+}
+.info-value {
+  font-size: 1.05rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+  font-family: 'Inter', sans-serif;
+  filter: brightness(1.25);
+}
+.info-sub {
+  font-size: 0.63rem; margin-top: 3px;
+  line-height: 1; height: 0.63rem; overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  opacity: 0.8;
+}
