@@ -31,6 +31,8 @@ const RSS = {
     '&hl=ko&gl=KR&ceid=KR:ko',
   NEWSPIM_ECONOMY:  'http://rss.newspim.com/news/category/103',  // 경제
   NEWSPIM_FINANCE:  'http://rss.newspim.com/news/category/105',  // 증권·금융
+  MT_NEWS:   'https://rss.mt.co.kr/mt_news.xml',               // 머니투데이 종합
+  MK_STOCK:  'https://www.mk.co.kr/rss/30100001/',             // 매일경제 증권
   YONHAP:    'https://www.yna.co.kr/rss/economy.xml',
   CNBC:      'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000311',
   INVESTING: 'https://www.investing.com/rss/news.rss',
@@ -275,15 +277,19 @@ async function translateWithDeepL(headlines) {
 async function fetchDomesticNews() {
   const cutoff = new Date(Date.now() - MAX_NEWS_AGE_MS);
 
-  const [rGoogle, rNewspimEco, rNewspimFin] = await Promise.allSettled([
+  const [rGoogle, rNewspimEco, rNewspimFin, rMT, rMK] = await Promise.allSettled([
     rssParser.parseURL(RSS.GOOGLE_NEWS),
     rssParser.parseURL(RSS.NEWSPIM_ECONOMY),
     rssParser.parseURL(RSS.NEWSPIM_FINANCE),
+    rssParser.parseURL(RSS.MT_NEWS),
+    rssParser.parseURL(RSS.MK_STOCK),
   ]);
 
-  if (rGoogle.status      === 'rejected') console.warn('[News] Google News 실패:', rGoogle.reason?.message);
-  if (rNewspimEco.status  === 'rejected') console.warn('[News] 뉴스핌(경제) 실패:', rNewspimEco.reason?.message);
-  if (rNewspimFin.status  === 'rejected') console.warn('[News] 뉴스핌(증권) 실패:', rNewspimFin.reason?.message);
+  if (rGoogle.status     === 'rejected') console.warn('[News] Google News 실패:', rGoogle.reason?.message);
+  if (rNewspimEco.status === 'rejected') console.warn('[News] 뉴스핌(경제) 실패:', rNewspimEco.reason?.message);
+  if (rNewspimFin.status === 'rejected') console.warn('[News] 뉴스핌(증권) 실패:', rNewspimFin.reason?.message);
+  if (rMT.status         === 'rejected') console.warn('[News] 머니투데이 실패:', rMT.reason?.message);
+  if (rMK.status         === 'rejected') console.warn('[News] 매일경제 실패:', rMK.reason?.message);
 
   const parseNewspim = (result, prefix) =>
     result.status === 'fulfilled'
@@ -314,11 +320,28 @@ async function fetchDomesticNews() {
         .filter(n => n.title.length > 5)
     : [];
 
+  const parseGeneric = (result, prefix, sourceName) =>
+    result.status === 'fulfilled'
+      ? (result.value.items ?? [])
+          .filter(item => new Date(item.pubDate || 0) >= cutoff)
+          .map(item => ({
+            newsId:    `${prefix}-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
+            title:     (item.title || '').trim(),
+            source:    sourceName,
+            url:       item.link || '',
+            track:     'domestic',
+            timestamp: new Date(item.pubDate || Date.now()),
+          }))
+          .filter(n => n.title.length > 5)
+      : [];
+
   // 합산 후 최신순 정렬
   return [
     ...googleItems,
     ...parseNewspim(rNewspimEco, 'newspim-eco'),
     ...parseNewspim(rNewspimFin, 'newspim-fin'),
+    ...parseGeneric(rMT, 'mt', '머니투데이'),
+    ...parseGeneric(rMK, 'mk', '매일경제'),
   ].sort((a, b) => b.timestamp - a.timestamp);
 }
 
