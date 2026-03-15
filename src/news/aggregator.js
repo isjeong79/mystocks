@@ -450,12 +450,13 @@ async function aggregateAndSave() {
     }
   }
 
-  // DB 누적 기사 조회 → 여기서만 title 중복 제거 → 브로드캐스트
+  // DB 누적 기사 조회 → createdAt(DB 저장 시각) 기준으로 최신순 정렬
+  // timestamp(발행일) 기준이면 오래된 기사가 새로 수집돼도 브로드캐스트에서 제외됨
   const cutoffDate = new Date(Date.now() - MAX_NEWS_AGE_MS);
   const recent = await News.find(
-    { timestamp: { $gte: cutoffDate } },
-    { newsId: 1, title: 1, source: 1, url: 1, track: 1, timestamp: 1 }
-  ).sort({ timestamp: -1 }).limit(BROADCAST_MAX * 3).lean();
+    { createdAt: { $gte: cutoffDate } },
+    { newsId: 1, title: 1, source: 1, url: 1, track: 1, timestamp: 1, createdAt: 1 }
+  ).sort({ createdAt: -1 }).limit(BROADCAST_MAX * 3).lean();
 
   const normalized = recent.map(n => ({ ...n, title: decodeHtml(n.title) }));
 
