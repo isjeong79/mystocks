@@ -25,7 +25,7 @@ const { refreshCommodities } = require('./src/market/commodities');
 const { refreshForex }       = require('./src/market/forex');
 const { connectEsignalNightFutures } = require('./src/futures/esignal');
 const { refreshHolidays }    = require('./src/holidays');
-const { getAllMarketStatus, isDomesticOpen } = require('./src/market/status');
+const { getAllMarketStatus, getDomesticStatus, isDomesticOpen, isDomesticAfterHours } = require('./src/market/status');
 const { aggregateAndSave, queryLatestNews } = require('./src/news/aggregator');
 
 // ── JSON body 파서 ────────────────────────────────────────────────────────────
@@ -229,15 +229,23 @@ async function main() {
     refreshForex();       setInterval(refreshForex,       5000);
     refreshCommodities(); setInterval(refreshCommodities, 5000);
 
-    // 시장 상태 1초마다 체크 → 변경 시 브로드캐스트
+    // 시장 상태 1초마다 체크 → 변경 시 브로드캐스트 + closed 전환 시 최종 종가 1회 조회
     let _lastStatusKey = '';
-    setInterval(() => {
+    setInterval(async () => {
       const status = getAllMarketStatus();
       const key = `${status.domestic.status}|${status.us.status}|${status.futures.status}`;
       if (key !== _lastStatusKey) {
         _lastStatusKey = key;
         console.log(`[시장상태] ${key}`);
         broadcast.broadcast({ type: 'market_status', ...status });
+
+        // closed_wait(15:30) 또는 closed(18:00) 진입 시 → 최종 종가 1회 조회
+        const ds = status.domestic.status;
+        if ((ds === 'closed_wait' || ds === 'closed') && getAccessToken()) {
+          console.log(`[KIS REST] ${ds} 전환 → 최종 종가 1회 조회`);
+          fetchKisStockPrices(watchlist.getWatchlistItems()).catch(() => {});
+          fetchKisIndexPrices().catch(() => {});
+        }
       }
     }, 1000);
 
@@ -251,19 +259,31 @@ async function main() {
       }
     }, 23 * 60 * 60 * 1000);
 
-    // 장 중 KOSPI/KOSDAQ 지수 1분마다 REST 갱신
+    // 국내 종목·지수 REST 폴링 — 상태별 주기 분기
+    // open/pre/동시호가: 1분(지수), 5분(종목) / after(시간외단일가): 10분 / closed_wait·closed: 폴링 없음
+    let _lastRestMin = -1;
     setInterval(async () => {
-      if (getAccessToken() && isDomesticOpen()) {
+      if (!getAccessToken()) return;
+      const ds  = getDomesticStatus().status;
+      if (ds === 'closed' || ds === 'closed_wait') return;
+
+      const now = new Date();
+      const min = now.getHours() * 60 + now.getMinutes();
+      if (min === _lastRestMin) return; // 동일 분 중복 실행 방지
+      _lastRestMin = min;
+
+      // 지수: 1분마다 (after 제외 — 지수는 시간외단일가 구간엔 의미 없음)
+      if (ds !== 'after') {
         await fetchKisIndexPrices().catch(() => {});
+      }
+
+      // 종목: open/pre/auction→5분, after→10분
+      const interval = ds === 'after' ? 10 : 5;
+      if (min % interval === 0) {
+        await fetchKisStockPrices(watchlist.getWatchlistItems()).catch(() => {});
       }
     }, 60 * 1000);
 
-    // 국내 종목 REST 가격 5분마다 갱신 (WS 미연결·장전·장후 fallback)
-    setInterval(async () => {
-      if (getAccessToken() && isDomesticOpen()) {
-        await fetchKisStockPrices(watchlist.getWatchlistItems()).catch(() => {});
-      }
-    }, 5 * 60 * 1000);
 
     // KIS WS 연결 (approvalKey 없으면 2분마다 재시도)
     let _kisStarted = false;
