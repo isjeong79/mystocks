@@ -5,9 +5,20 @@ const KisToken = require('../db/models/KisToken');
 let approvalKey = null;
 let accessToken = null;
 
-// ── AccessToken: 항상 신규 발급 (KIS는 재발급 시 이전 토큰 즉시 무효화) ──────
-async function fetchAccessToken() {
-  const now = new Date();
+// ── AccessToken: DB 캐시 검증 후 유효하면 재사용, force=true면 무조건 재발급 ──
+async function fetchAccessToken(force = false) {
+  const now    = new Date();
+  const buffer = 5 * 60 * 1000; // 만료 5분 전부터 갱신
+
+  if (!force) {
+    const cached = await KisToken.findOne({ appKey: APP_KEY }).lean();
+    if (cached && cached.expiresAt.getTime() - buffer > now.getTime()) {
+      accessToken = cached.accessToken;
+      const remaining = Math.round((cached.expiresAt.getTime() - now.getTime()) / 60000);
+      console.log(`[KIS] accessToken DB 캐시 사용 (잔여 ${remaining}분)`);
+      return;
+    }
+  }
 
   const res = await axios.post(`${REST_BASE}/oauth2/tokenP`, {
     grant_type: 'client_credentials',

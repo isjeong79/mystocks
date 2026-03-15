@@ -155,6 +155,9 @@ clientWss.on('connection', async (ws, req) => {
 
   console.log(`브라우저 접속${userId ? ` (userId: ${userId})` : ' (비로그인)'}`);
 
+  // 접속 시 토큰 유효성 검증 → 만료 시 재발급
+  try { await fetchAccessToken(); } catch (e) { console.error('[KIS] 접속 시 토큰 갱신 실패:', e.message); }
+
   const userItems  = await watchlist.getWatchlistForUser(userId);
   ws.send(JSON.stringify({ type: 'init', state, watchlist: watchlist.buildWithPrices(userItems), marketStatus: getAllMarketStatus() }));
 
@@ -241,7 +244,7 @@ async function main() {
     // accessToken 23시간마다 갱신 (KIS 토큰 유효기간 24시간)
     setInterval(async () => {
       try {
-        await fetchAccessToken();
+        await fetchAccessToken(true);
         console.log('[KIS] accessToken 자동 갱신 완료');
       } catch (e) {
         console.error('[KIS] accessToken 자동 갱신 실패:', e.message);
