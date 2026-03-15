@@ -447,8 +447,15 @@ async function aggregateAndSave() {
     }
   }
 
-  // DB 누적 기사 조회 → createdAt(DB 저장 시각) 기준으로 최신순 정렬
-  // timestamp(발행일) 기준이면 오래된 기사가 새로 수집돼도 브로드캐스트에서 제외됨
+  // 저장 후 즉시 최신 목록 반환
+  return queryLatestNews();
+}
+
+/**
+ * DB에서 최신 뉴스 목록 조회 (RSS 수집 없음 — 가볍고 빠름)
+ * aggregateAndSave 내부와 server.js 주기적 갱신 체크 양쪽에서 사용
+ */
+async function queryLatestNews() {
   const cutoffDate = new Date(Date.now() - MAX_NEWS_AGE_MS);
   const recent = await News.find(
     { createdAt: { $gte: cutoffDate } },
@@ -456,10 +463,7 @@ async function aggregateAndSave() {
   ).sort({ createdAt: -1 }).limit(BROADCAST_MAX * 3).lean();
 
   const normalized = recent.map(n => ({ ...n, title: decodeHtml(n.title) }));
-
-  // 브로드캐스트용 dedup은 20자 기준 — 15자면 다른 기사도 과도하게 제거됨
-  return deduplicateByPrefix(normalized, 'title', 20)
-    .slice(0, BROADCAST_MAX);
+  return deduplicateByPrefix(normalized, 'title', 20).slice(0, BROADCAST_MAX);
 }
 
-module.exports = { aggregateAndSave };
+module.exports = { aggregateAndSave, queryLatestNews };

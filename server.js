@@ -26,7 +26,7 @@ const { refreshForex }       = require('./src/market/forex');
 const { connectEsignalNightFutures } = require('./src/futures/esignal');
 const { refreshHolidays }    = require('./src/holidays');
 const { getAllMarketStatus, isDomesticOpen } = require('./src/market/status');
-const { aggregateAndSave } = require('./src/news/aggregator');
+const { aggregateAndSave, queryLatestNews } = require('./src/news/aggregator');
 
 // ── JSON body 파서 ────────────────────────────────────────────────────────────
 function parseBody(req) {
@@ -254,12 +254,12 @@ async function main() {
     // 5. 종목 DB 확인 (백그라운드)
     ensureStocksLoaded().catch(e => console.error('[종목로더]', e.message));
 
-    // 6. 뉴스 수집: 즉시 첫 실행, 이후 2분 주기
+    // 6. 뉴스 수집: 즉시 첫 실행, 이후 2분 주기 (RSS 수집 + DB 저장)
     const runNewsAggregator = async () => {
       try {
         const items = await aggregateAndSave();
         if (items.length > 0) {
-          lastNewsItems = items;  // 캐시 갱신
+          lastNewsItems = items;
           broadcast.broadcast({ type: 'news_ticker', items });
           console.log(`[News] 브로드캐스트: ${items.length}건`);
         }
@@ -269,6 +269,24 @@ async function main() {
     };
     runNewsAggregator();
     setInterval(runNewsAggregator, 2 * 60 * 1000); // 2분 주기
+
+    // 7. 뉴스 즉시 반영: 30초마다 DB 조회 → 새 기사 있으면 즉시 브로드캐스트
+    // (RSS 수집 없이 DB만 조회하므로 가볍고 빠름)
+    let _lastNewsKey = '';
+    setInterval(async () => {
+      try {
+        const items = await queryLatestNews();
+        if (items.length === 0) return;
+        const key = items.map(i => i.newsId).join(',');
+        if (key === _lastNewsKey) return; // 변화 없으면 스킵
+        _lastNewsKey = key;
+        lastNewsItems = items;
+        broadcast.broadcast({ type: 'news_ticker', items });
+        console.log(`[News] 티커 갱신 (30s): ${items.length}건`);
+      } catch (e) {
+        console.error('[News] 티커 갱신 오류:', e.message);
+      }
+    }, 30 * 1000); // 30초 주기
   });
 }
 
