@@ -340,7 +340,8 @@ async function fetchDomesticNews() {
         timestamp: new Date(item.pubDate || Date.now()),
       }))
       .filter(n => n.title.length > 5)
-      .filter(n => !keywordRe || keywordRe.test(n.title));
+      .filter(n => !keywordRe || keywordRe.test(n.title))
+      .filter(n => !/^\[/.test(n.title));  // [포토], [인사] 등 태그 기사 제외
 
   // 구글뉴스: pubDate 없는 항목은 Invalid Date → cutoff 비교 false → 자동 제외
   // track: 'domestic' 고정 → fetchGlobalNews와 완전 분리 → DeepL 호출 없음
