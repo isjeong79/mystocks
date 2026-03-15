@@ -74,8 +74,13 @@ async function fetchGlobalNews() {
 
   if (filtered.length === 0) return [];
 
+  // 최신순 정렬 후 상위 10개만 슬라이싱 → Gemini 입력 토큰 초과 방지
+  const sliced = filtered
+    .sort((a, b) => b.datetime - a.datetime)
+    .slice(0, 10);
+
   // Gemini 단 1회 호출로 배열 전체 번역
-  const translated = await translateWithGemini(filtered);
+  const translated = await translateWithGemini(sliced);
 
   return translated.map(item => ({
     newsId:    `finnhub-${item.id}`,
