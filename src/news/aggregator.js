@@ -179,8 +179,8 @@ async function translateWithGemini(items) {
     return result;
   } catch (e) {
     if (e.response?.status === 429) {
-      _geminiCooldownUntil = Date.now() + 15 * 60 * 1000; // 15분 쿨다운
-      console.warn('[News] Gemini 429 → 15분 쿨다운 설정');
+      _geminiCooldownUntil = Date.now() + 2 * 60 * 1000; // 2분 쿨다운 (RPM 초기화 주기)
+      console.warn('[News] Gemini 429 → 2분 쿨다운 설정');
     } else {
       console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
     }
