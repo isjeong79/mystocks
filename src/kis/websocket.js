@@ -7,7 +7,6 @@ const state     = require('../state');
 const broadcast = require('../broadcast');
 
 let kisWs = null;
-let _h0stasp0Logged = false; // H0STASP0 개별종목 필드 인덱스 확인용 1회 디버그 로그
 
 function subMsg(trId, trKey) {
   return JSON.stringify({
@@ -52,9 +51,9 @@ function connectKis(getWatchlistItems) {
       kisWs.send(subMsg('HDFSCNT0', trKey));
     });
     kisWs.send(subMsg('H0FOREXS', 'FX@USD'));
-    // 코스피/코스닥 지수 실시간 구독
-    kisWs.send(subMsg('H0STASP0', '0001')); // KOSPI 지수 실시간
-    kisWs.send(subMsg('H0STASP0', '1001')); // KOSDAQ 지수 실시간
+    // 코스피/코스닥 지수 실시간 구독 (국내업종 실시간 체결 TR)
+    kisWs.send(subMsg('H0STCNI0', '0001')); // KOSPI 지수
+    kisWs.send(subMsg('H0STCNI0', '1001')); // KOSDAQ 지수
   });
 
   kisWs.on('message', data => {
@@ -114,36 +113,33 @@ function connectKis(getWatchlistItems) {
       state.usEtfs[symbol] = { ...state.usEtfs[symbol], price, sign, change, changeRate, dir };
       broadcast.broadcast({ type: 'us_etf', symbol, name: state.usEtfs[symbol].name, price, change, changeRate, dir });
 
+    } else if (trId === 'H0STCNI0') {
+      // 국내 업종(지수) 실시간 체결: f[0]=업종코드, f[2]=현재지수, f[3]=부호, f[4]=전일대비, f[5]=등락률
+      const code       = f[0];
+      const key        = code === '0001' ? 'KOSPI' : code === '1001' ? 'KOSDAQ' : null;
+      if (!key) return;
+      const price      = parseFloat(f[2]);
+      const sign       = f[3];
+      const change     = parseFloat(f[4]);
+      const changeRate = parseFloat(f[5]);
+      if (isNaN(price)) return;
+      const dir = signToDir(sign);
+      state.indices[key] = { price, change, changeRate, dir };
+      broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
+
     } else if (trId === 'H0STASP0') {
-      const code = f[0];
-      if (code === '0001' || code === '1001') {
-        // 국내지수 실시간: f[2]=현재지수, f[3]=부호, f[4]=전일대비, f[5]=등락률
-        const key        = code === '0001' ? 'KOSPI' : 'KOSDAQ';
-        const price      = parseFloat(f[2]);
-        const sign       = f[3];
-        const change     = parseFloat(f[4]);
-        const changeRate = parseFloat(f[5]);
-        if (isNaN(price)) return;
-        const dir = signToDir(sign);
-        state.indices[key] = { price, change, changeRate, dir };
-        broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
-      } else if (state.stocks[code]) {
-        // 개별종목 호가 — 동시호가 구간의 예상체결가 사용
-        // ※ KIS H0STASP0 필드 인덱스: 실제 수신 데이터로 검증 필요 (아래 로그 참조)
-        if (f.length > 10 && !_h0stasp0Logged) {
-          _h0stasp0Logged = true;
-          console.log(`[KIS WS H0STASP0 DEBUG] ${code} 전체필드(${f.length}개):`, f.slice(0, 60));
-        }
-        // f[54]: 예상체결가 (검증 후 인덱스 수정 필요)
-        const price = parseFloat(f[54]);
-        if (!price || isNaN(price)) return;
-        const sign       = f[56] ?? '3';
-        const change     = parseFloat(f[55] ?? 0);
-        const changeRate = parseFloat(f[57] ?? 0);
-        const dir        = signToDir(sign);
-        state.stocks[code] = { ...state.stocks[code], price, sign, change, changeRate, dir };
-        broadcast.broadcast({ type: 'stock', code, price, sign, change, changeRate, dir });
-      }
+      // 개별종목 호가 — 동시호가 구간의 예상체결가 사용
+      // KIS 공식 명세: f[47]=예상체결가, f[50]=예상체결대비, f[51]=부호, f[52]=예상체결등락률
+      const code  = f[0];
+      if (!state.stocks[code]) return;
+      const price = parseFloat(f[47]);
+      if (!price || isNaN(price)) return;
+      const sign       = f[51] ?? '3';
+      const change     = parseFloat(f[50] ?? 0);
+      const changeRate = parseFloat(f[52] ?? 0);
+      const dir        = signToDir(sign);
+      state.stocks[code] = { ...state.stocks[code], price, sign, change, changeRate, dir };
+      broadcast.broadcast({ type: 'stock', code, price, sign, change, changeRate, dir });
 
     } else {
       console.log(`[KIS WS] 미처리 trId=${trId} fields[0-4]:`, f.slice(0, 5));
