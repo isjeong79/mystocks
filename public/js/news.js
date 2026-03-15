@@ -18,6 +18,7 @@ const TRACK_LABELS = {
 };
 const TICKER_MIN_DURATION  = 40;   // 초
 const KEEPALIVE_INTERVAL   = 5 * 60 * 1000; // 5분
+const TICKER_UPDATE_DELAY  = 3;    // 새 기사 적용까지 기다릴 루프 수
 
 // ── Keep-alive ────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,50 @@ export function startVisibilityFix() {
     void track.offsetWidth;
     track.style.animation = current;
   });
+}
+
+// ── 지연 업데이트 (루프 완료 후 교체) ────────────────────────────────────────
+
+let _pendingItems  = null;
+let _loopCountdown = 0;
+
+/**
+ * 티커가 재생 중이면 TICKER_UPDATE_DELAY 루프 후 교체, 아니면 즉시 렌더링
+ */
+export function scheduleTickerUpdate(items) {
+  const track = document.getElementById('news-ticker-track');
+  const isPlaying = track?.style.animation && track.style.animation !== 'none';
+
+  if (!isPlaying) {
+    renderNewsTicker(items);
+    return;
+  }
+
+  _pendingItems  = items;
+  _loopCountdown = TICKER_UPDATE_DELAY;
+
+  // 이미 리스너가 없으면 등록
+  if (!track._iterListenerActive) {
+    track._iterListenerActive = true;
+    track.addEventListener('animationiteration', _onIteration);
+  }
+}
+
+function _onIteration() {
+  const track = document.getElementById('news-ticker-track');
+  if (!_pendingItems) {
+    track._iterListenerActive = false;
+    track.removeEventListener('animationiteration', _onIteration);
+    return;
+  }
+  _loopCountdown--;
+  if (_loopCountdown <= 0) {
+    track._iterListenerActive = false;
+    track.removeEventListener('animationiteration', _onIteration);
+    const items = _pendingItems;
+    _pendingItems = null;
+    renderNewsTicker(items);
+  }
 }
 
 // ── 렌더링 ────────────────────────────────────────────────────────────────────

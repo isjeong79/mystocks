@@ -84,7 +84,7 @@ function onMessage(msg) {
       break;
 
     case 'news_ticker':
-      News.renderNewsTicker(msg.items);
+      News.scheduleTickerUpdate(msg.items);
       break;
 
     case 'stock_update_done':
