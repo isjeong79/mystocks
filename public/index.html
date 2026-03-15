@@ -100,6 +100,8 @@
       width: 420px; max-width: 92vw; max-height: 80vh;
       display: flex; flex-direction: column; overflow: hidden;
       box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+      /* 키보드 높이만큼 margin-bottom으로 위치 조정 (JS에서 설정) */
+      transition: margin-bottom 0.15s ease;
     }
 
     /* 모달 헤더 */
@@ -265,10 +267,10 @@
       #modal {
         width: 100%;
         max-width: 100%;
-        max-height: 85vh;
+        /* dvh: 키보드를 제외한 실제 가시 높이 자동 반영 (iOS 15.4+, Android Chrome 108+) */
+        max-height: min(85vh, 85dvh);
         border-radius: 20px 20px 0 0;
         margin: 0;
-        /* 안전 영역 고려 */
         padding-bottom: env(safe-area-inset-bottom, 0px);
       }
     }
@@ -675,18 +677,16 @@
   // ── 모달 ──────────────────────────────────────────────────────────────────
   let currentTab = 'domestic', searchTimer = null;
 
-  // 모바일 키보드 대응: visual viewport 변경 시 모달 높이 조정
+  // 모바일 키보드 대응: overlay 위치는 건드리지 않고 modal의 margin-bottom만 조정
+  // → 탭 전환 시 overlay 재배치로 인한 팝업 사라짐 현상 방지
   function adjustModalForKeyboard() {
     if (!window.visualViewport || window.innerWidth > 500) return;
-    const vv = window.visualViewport;
     const overlay = document.getElementById('modal-overlay');
-    const modal   = document.getElementById('modal');
     if (!overlay.classList.contains('open')) return;
-    const availH = vv.height - 20;
-    modal.style.maxHeight = Math.min(availH, window.innerHeight * 0.9) + 'px';
-    // 오버레이 위치를 visual viewport에 맞춤
-    overlay.style.top    = vv.offsetTop + 'px';
-    overlay.style.height = vv.height + 'px';
+    const vv = window.visualViewport;
+    // 키보드 높이 = 전체 뷰포트 - 현재 가시 영역
+    const keyboardH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.getElementById('modal').style.marginBottom = keyboardH > 10 ? keyboardH + 'px' : '';
   }
 
   if (window.visualViewport) {
@@ -695,21 +695,17 @@
   }
 
   function openModal() {
-    const overlay = document.getElementById('modal-overlay');
-    overlay.classList.add('open');
-    adjustModalForKeyboard();
-    setTimeout(() => document.getElementById('search-input').focus(), 100);
+    document.getElementById('modal-overlay').classList.add('open');
+    // 모달 표시 직후 input 포커스 → 키보드 자동 표시
+    requestAnimationFrame(() => {
+      document.getElementById('search-input').focus();
+    });
   }
 
   function closeModal() {
-    // 키보드를 먼저 닫아야 iOS 줌 복원이 자연스러움
     document.getElementById('search-input').blur();
-    const overlay = document.getElementById('modal-overlay');
-    overlay.classList.remove('open');
-    // 스타일 초기화
-    overlay.style.top    = '';
-    overlay.style.height = '';
-    document.getElementById('modal').style.maxHeight = '';
+    document.getElementById('modal-overlay').classList.remove('open');
+    document.getElementById('modal').style.marginBottom = '';
     document.getElementById('search-input').value = '';
     document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
   }
@@ -722,9 +718,12 @@
   function setTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    document.getElementById('search-input').placeholder = tab === 'domestic' ? '종목명 또는 종목코드 검색' : '티커 또는 회사명 검색';
-    document.getElementById('search-input').value = '';
+    const input = document.getElementById('search-input');
+    input.placeholder = tab === 'domestic' ? '종목명 또는 종목코드 검색' : '티커 또는 회사명 검색';
+    input.value = '';
     document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
+    // 탭 전환 후 input 재포커스 → 키보드 그대로 유지
+    requestAnimationFrame(() => input.focus());
   }
 
   function onSearchInput() {
