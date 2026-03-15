@@ -25,9 +25,16 @@ const FINNHUB_BASE  = 'https://finnhub.io/api/v1';
 const DEEPL_BASE    = 'https://api-free.deepl.com/v2';
 const DEEPL_TIMEOUT = 15_000;
 
+// 구글 뉴스 국내 경제 검색 키워드 (OR 조합 → 속보 범위 최대화)
+const DOMESTIC_KEYWORDS = [
+  '코스피', '코스닥', '증시', '한국은행', '기준금리', '금리', '환율',
+  'AI', '원자력', '전력', '자동차', '바이오', '부동산정책',
+  '반도체', '이차전지', '공시', '금융위', '수출입',
+];
+
 const RSS = {
   GOOGLE_NEWS: 'https://news.google.com/rss/search?q=' +
-    encodeURIComponent('코스피 OR 한국은행 OR 금융위 OR 기준금리 OR 코스닥') +
+    encodeURIComponent(DOMESTIC_KEYWORDS.join(' OR ')) +
     '&hl=ko&gl=KR&ceid=KR:ko',
   NEWSPIM_ECONOMY:  'http://rss.newspim.com/news/category/103',  // 경제
   NEWSPIM_FINANCE:  'http://rss.newspim.com/news/category/105',  // 증권·금융
@@ -71,11 +78,11 @@ const INVESTING_BLOCK_CODES  = new Set([403, 429, 451]);
  * titleField 기준으로 앞 DUP_PREFIX_LEN 자가 동일한 항목을 제거
  * (먼저 나온 항목 유지, 이후 항목 제거)
  */
-function deduplicateByPrefix(items, titleField = 'headline') {
+function deduplicateByPrefix(items, titleField = 'headline', prefixLen = DUP_PREFIX_LEN) {
   const seen = new Set();
   return items.filter(item => {
     const prefix = String(item[titleField] || '')
-      .slice(0, DUP_PREFIX_LEN)
+      .slice(0, prefixLen)
       .toLowerCase()
       .replace(/\s+/g, ' ')
       .trim();
@@ -306,7 +313,9 @@ async function fetchDomesticNews() {
           .filter(n => n.title.length > 5)
       : [];
 
-  const googleItems  = rGoogle.status === 'fulfilled'
+  // 구글뉴스: pubDate 없는 항목은 Invalid Date → cutoff 비교 false → 자동 제외
+  // track: 'domestic' 고정 → fetchGlobalNews와 완전 분리 → DeepL 호출 없음
+  const googleRaw = rGoogle.status === 'fulfilled'
     ? (rGoogle.value.items ?? [])
         .filter(item => new Date(item.pubDate) >= cutoff)
         .map(item => ({
@@ -315,10 +324,13 @@ async function fetchDomesticNews() {
           source:    extractRssSource(item.title) || '구글뉴스',
           url:       item.link || '',
           track:     'domestic',
-          timestamp: new Date(item.pubDate || Date.now()),
+          timestamp: new Date(item.pubDate),
         }))
         .filter(n => n.title.length > 5)
     : [];
+
+  // 구글뉴스 내 중복 엄격 제거 (20자 prefix) - 키워드 확장으로 동일 기사 다중 노출 방지
+  const googleItems = deduplicateByPrefix(googleRaw, 'title', 20);
 
   const parseGeneric = (result, prefix, sourceName) =>
     result.status === 'fulfilled'
