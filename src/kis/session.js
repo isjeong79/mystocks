@@ -42,4 +42,4 @@ function foreignTrKey(market, symbol) {
   return `${prefix}${mkt}${symbol}`;
 }
 
-module.exports = { kisMarket, getUsMarketSession, foreignTrKey, DEFAULT_MARKET };
+module.exports = { kisMarket, getUsMarketSession, foreignTrKey, DEFAULT_MARKET, SESSION_MARKET_MAP };
