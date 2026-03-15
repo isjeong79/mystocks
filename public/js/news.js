@@ -91,7 +91,11 @@ export function renderNewsTicker(items) {
  */
 export function showTickerLoading() {
   const track = document.getElementById('news-ticker-track');
-  if (track) track.innerHTML =
+  if (!track) return;
+  // 스크롤 애니메이션 중단 → 로딩 텍스트가 제자리에서 깜빡이도록
+  track.style.animation = 'none';
+  track.style.animationDuration = '';
+  track.innerHTML =
     '<span class="ticker-set"><span class="ticker-item ticker-loading">글로벌 뉴스 불러오는 중...</span></span>';
 }
 
