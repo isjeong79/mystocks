@@ -67,7 +67,7 @@
   display: inline-block;
   white-space: nowrap;
   line-height: 42px;        /* 세로 중앙 정렬 */
-  animation: ticker-scroll 60s linear infinite;
+  animation: ticker-scroll 9999s linear infinite; /* JS가 실제 duration 덮어씀 */
   will-change: transform;
   cursor: default;
   vertical-align: top;

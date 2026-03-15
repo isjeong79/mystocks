@@ -19,7 +19,7 @@ body::before {
 
 /* ── 헤더 ─────────────────────────────────────────────────────────────── */
 h1 {
-  font-size: 1.1rem; font-weight: 700; margin-bottom: 18px;
+  font-size: 1.25rem; font-weight: 700; margin-bottom: 18px;
   display: flex; align-items: center; gap: 10px;
   background: linear-gradient(110deg, var(--accent) 0%, var(--green) 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
@@ -36,7 +36,7 @@ h1 > span:not(#status) { flex: 1; }
 }
 
 #chart-icon {
-  width: 28px; height: 28px; object-fit: contain; flex-shrink: 0;
+  width: 18px; height: 18px; object-fit: contain; flex-shrink: 0;
 }
 
 #status {

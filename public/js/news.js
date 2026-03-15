@@ -16,8 +16,7 @@ const TRACK_LABELS = {
   domestic:    '🇰🇷 국내',
   disclosure:  '📋 공시',
 };
-const TICKER_MIN_DURATION  = 30;   // 초
-const TICKER_MAX_DURATION  = 180;  // 초
+const TICKER_MIN_DURATION  = 40;   // 초
 const KEEPALIVE_INTERVAL   = 5 * 60 * 1000; // 5분
 
 // ── Keep-alive ────────────────────────────────────────────────────────────────
@@ -35,13 +34,12 @@ export function startVisibilityFix() {
     if (document.visibilityState !== 'visible') return;
     const track = document.getElementById('news-ticker-track');
     if (!track) return;
-    // animation이 실제로 동작 중인 경우에만 재시작 (loading 상태 제외)
-    const current = track.style.animationDuration;
-    if (!current) return;
+    // animation 단축속성 인라인값 확인 (loading 상태 = none 이면 재시작 안 함)
+    const current = track.style.animation;
+    if (!current || current === 'none') return;
     track.style.animation = 'none';
     void track.offsetWidth;
-    track.style.animation = '';
-    track.style.animationDuration = current;
+    track.style.animation = current;
   });
 }
 
@@ -59,25 +57,24 @@ export function renderNewsTicker(items) {
   const html = items.map(item => buildTickerItem(item)).join(sep);
 
   // 1단계: 세트 1개만 렌더링해서 실제 픽셀 너비를 측정
+  // .ticker-set은 display:inline → offsetWidth 신뢰 불가, track.scrollWidth 사용
   track.style.animation = 'none';
   track.innerHTML = `<span class="ticker-set">${html}</span>`;
   void track.offsetWidth;  // reflow 강제
 
-  const setWidth = track.querySelector('.ticker-set').offsetWidth;
+  const setWidth = track.scrollWidth;  // inline-block 컨테이너 기준으로 측정
 
   // 2단계: 세트 2개로 복제 + 측정한 픽셀값을 CSS 변수로 전달 → 정확한 루프
   track.innerHTML = `<span class="ticker-set">${html}</span>` +
                     `<span class="ticker-set" aria-hidden="true">${html}</span>`;
   track.style.setProperty('--set-width', `${setWidth}px`);
 
-  // 애니메이션 속도: 픽셀/초 기준 (120px/s 고정)
-  const duration = Math.min(TICKER_MAX_DURATION,
-                   Math.max(TICKER_MIN_DURATION, setWidth / 120));
-  track.style.animationDuration = `${duration}s`;
-
-  // 애니메이션 재시작
-  void track.offsetWidth;
-  track.style.animation = '';
+  // 고정 속도 40px/s — animation 단축속성 전체를 인라인으로 세팅해
+  // CSS 파일의 60s 기본값이 덮어씌우는 문제 방지
+  const SPEED_PX_PER_SEC = 40;
+  const duration = Math.max(TICKER_MIN_DURATION, setWidth / SPEED_PX_PER_SEC);
+  void track.offsetWidth;  // reflow → 애니메이션 재시작 트리거
+  track.style.animation = `ticker-scroll ${duration}s linear infinite`;
 
   // 클릭 이벤트 위임
   track.onclick = e => {

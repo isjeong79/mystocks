@@ -39,7 +39,7 @@ const RSS = {
   NEWSPIM_ECONOMY:  'http://rss.newspim.com/news/category/103',  // 경제
   NEWSPIM_FINANCE:  'http://rss.newspim.com/news/category/105',  // 증권·금융
   MT_NEWS:   'https://rss.mt.co.kr/mt_news.xml',               // 머니투데이 종합
-  MK_STOCK:  'https://www.mk.co.kr/rss/30100001/',             // 매일경제 증권
+  MK_STOCK:  'https://www.mk.co.kr/rss/50200011/',             // 매일경제 증권
   YONHAP:    'https://www.yna.co.kr/rss/economy.xml',
   CNBC:      'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000311',
   INVESTING: 'https://www.investing.com/rss/news.rss',
@@ -65,6 +65,33 @@ const GLOBAL_KEYWORDS = [
 const KEYWORD_RE = new RegExp(GLOBAL_KEYWORDS.join('|'), 'i');
 
 const rssParser = new RSSParser({ timeout: RSS_TIMEOUT });
+
+// ── HTML 엔티티 디코더 ────────────────────────────────────────────────────────
+// RSS 피드가 &amp;#039; 처럼 이중 인코딩된 엔티티를 포함하는 경우 정규화
+function decodeHtml(str) {
+  return String(str || '')
+    .replace(/&#(\d+);/g,   (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g,   '<')
+    .replace(/&gt;/g,   '>')
+    .replace(/&amp;/g,  '&');
+}
+
+// ── 소스별 장애 격리 헬퍼 ─────────────────────────────────────────────────────
+/**
+ * fetchFn 실행 시 예외가 발생해도 fallback 을 반환하고 경고만 출력
+ * → Promise.all 안에서 사용하면 한 소스 실패가 전체를 중단시키지 않음
+ */
+async function safeRssFetch(name, fetchFn, fallback = []) {
+  try {
+    return await fetchFn();
+  } catch (e) {
+    console.warn(`[News] ${name} 실패:`, e.message);
+    return fallback;
+  }
+}
 
 // ── Investing.com 서킷 브레이커 ───────────────────────────────────────────────
 // 403/429/451 차단 감지 시 1시간 쿨다운 → 불필요한 반복 요청 방지
@@ -173,7 +200,7 @@ async function _fetchInvestingRaw(cutoff) {
       _investingCooldownUntil = Date.now() + INVESTING_COOLDOWN_MS;
       console.warn(`[News] Investing.com 차단 감지 (HTTP ${status}) → 1시간 스킵`);
     }
-    throw e; // Promise.allSettled가 나머지 소스는 정상 처리
+    throw e; // safeRssFetch가 받아서 나머지 소스는 정상 처리
   }
 }
 
@@ -182,22 +209,14 @@ async function _fetchInvestingRaw(cutoff) {
 async function fetchGlobalNews() {
   const cutoff = Date.now() - MAX_NEWS_AGE_MS;
 
-  // 3개 해외 소스 병렬 수집 (소스별 장애 격리)
-  const [rFinnhub, rCNBC, rInvesting] = await Promise.allSettled([
-    _fetchFinnhubRaw(cutoff),
-    _fetchCNBCRaw(cutoff),
-    _fetchInvestingRaw(cutoff),
+  // 3개 해외 소스 병렬 수집 (소스별 개별 try-catch → 한 소스 실패가 나머지에 영향 없음)
+  const [finnhubItems, cnbcItems, investingItems] = await Promise.all([
+    safeRssFetch('Finnhub',       () => _fetchFinnhubRaw(cutoff)),
+    safeRssFetch('CNBC',          () => _fetchCNBCRaw(cutoff)),
+    safeRssFetch('Investing.com', () => _fetchInvestingRaw(cutoff)),
   ]);
 
-  if (rFinnhub.status  === 'rejected') console.warn('[News] Finnhub 실패:', rFinnhub.reason?.message);
-  if (rCNBC.status     === 'rejected') console.warn('[News] CNBC 실패:', rCNBC.reason?.message);
-  if (rInvesting.status === 'rejected') console.warn('[News] Investing 실패:', rInvesting.reason?.message);
-
-  const raw = [
-    ...(rFinnhub.status  === 'fulfilled' ? rFinnhub.value  : []),
-    ...(rCNBC.status     === 'fulfilled' ? rCNBC.value     : []),
-    ...(rInvesting.status === 'fulfilled' ? rInvesting.value : []),
-  ];
+  const raw = [...finnhubItems, ...cnbcItems, ...investingItems];
 
   if (raw.length === 0) return [];
 
@@ -284,76 +303,54 @@ async function translateWithDeepL(headlines) {
 async function fetchDomesticNews() {
   const cutoff = new Date(Date.now() - MAX_NEWS_AGE_MS);
 
-  const [rGoogle, rNewspimEco, rNewspimFin, rMT, rMK] = await Promise.allSettled([
-    rssParser.parseURL(RSS.GOOGLE_NEWS),
-    rssParser.parseURL(RSS.NEWSPIM_ECONOMY),
-    rssParser.parseURL(RSS.NEWSPIM_FINANCE),
-    rssParser.parseURL(RSS.MT_NEWS),
-    rssParser.parseURL(RSS.MK_STOCK),
+  const EMPTY_FEED = { items: [] };
+
+  // 5개 국내 소스 병렬 수집 (소스별 개별 try-catch → 한 소스 실패가 나머지에 영향 없음)
+  const [googleFeed, newspimEcoFeed, newspimFinFeed, mtFeed, mkFeed] = await Promise.all([
+    safeRssFetch('Google News', () => rssParser.parseURL(RSS.GOOGLE_NEWS),      EMPTY_FEED),
+    safeRssFetch('뉴스핌(경제)', () => rssParser.parseURL(RSS.NEWSPIM_ECONOMY), EMPTY_FEED),
+    safeRssFetch('뉴스핌(증권)', () => rssParser.parseURL(RSS.NEWSPIM_FINANCE), EMPTY_FEED),
+    safeRssFetch('머니투데이',   () => rssParser.parseURL(RSS.MT_NEWS),         EMPTY_FEED),
+    safeRssFetch('매일경제',     () => rssParser.parseURL(RSS.MK_STOCK),        EMPTY_FEED),
   ]);
 
-  if (rGoogle.status     === 'rejected') console.warn('[News] Google News 실패:', rGoogle.reason?.message);
-  if (rNewspimEco.status === 'rejected') console.warn('[News] 뉴스핌(경제) 실패:', rNewspimEco.reason?.message);
-  if (rNewspimFin.status === 'rejected') console.warn('[News] 뉴스핌(증권) 실패:', rNewspimFin.reason?.message);
-  if (rMT.status         === 'rejected') console.warn('[News] 머니투데이 실패:', rMT.reason?.message);
-  if (rMK.status         === 'rejected') console.warn('[News] 매일경제 실패:', rMK.reason?.message);
-
-  const parseNewspim = (result, prefix) =>
-    result.status === 'fulfilled'
-      ? (result.value.items ?? [])
-          .filter(item => new Date(item.pubDate || 0) >= cutoff)
-          .map(item => ({
-            newsId:    `${prefix}-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
-            title:     (item.title || '').trim(),
-            source:    '뉴스핌',
-            url:       item.link || '',
-            track:     'domestic',
-            timestamp: new Date(item.pubDate || Date.now()),
-          }))
-          .filter(n => n.title.length > 5)
-      : [];
+  const parseFeedItems = (feed, prefix, sourceName) =>
+    (feed.items ?? [])
+      .filter(item => new Date(item.pubDate || 0) >= cutoff)
+      .map(item => ({
+        newsId:    `${prefix}-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
+        title:     decodeHtml((item.title || '').trim()),
+        source:    sourceName,
+        url:       item.link || '',
+        track:     'domestic',
+        timestamp: new Date(item.pubDate || Date.now()),
+      }))
+      .filter(n => n.title.length > 5);
 
   // 구글뉴스: pubDate 없는 항목은 Invalid Date → cutoff 비교 false → 자동 제외
   // track: 'domestic' 고정 → fetchGlobalNews와 완전 분리 → DeepL 호출 없음
-  const googleRaw = rGoogle.status === 'fulfilled'
-    ? (rGoogle.value.items ?? [])
-        .filter(item => new Date(item.pubDate) >= cutoff)
-        .map(item => ({
-          newsId:    `gnews-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
-          title:     (item.title || '').replace(/\s*-\s*[^-]+$/, '').trim(),
-          source:    extractRssSource(item.title) || '구글뉴스',
-          url:       item.link || '',
-          track:     'domestic',
-          timestamp: new Date(item.pubDate),
-        }))
-        .filter(n => n.title.length > 5)
-    : [];
+  const googleRaw = (googleFeed.items ?? [])
+    .filter(item => new Date(item.pubDate) >= cutoff)
+    .map(item => ({
+      newsId:    `gnews-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
+      title:     decodeHtml((item.title || '').replace(/\s*-\s*[^-]+$/, '').trim()),
+      source:    extractRssSource(item.title) || '구글뉴스',
+      url:       item.link || '',
+      track:     'domestic',
+      timestamp: new Date(item.pubDate),
+    }))
+    .filter(n => n.title.length > 5);
 
   // 구글뉴스 내 중복 엄격 제거 (20자 prefix) - 키워드 확장으로 동일 기사 다중 노출 방지
   const googleItems = deduplicateByPrefix(googleRaw, 'title', 20);
 
-  const parseGeneric = (result, prefix, sourceName) =>
-    result.status === 'fulfilled'
-      ? (result.value.items ?? [])
-          .filter(item => new Date(item.pubDate || 0) >= cutoff)
-          .map(item => ({
-            newsId:    `${prefix}-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
-            title:     (item.title || '').trim(),
-            source:    sourceName,
-            url:       item.link || '',
-            track:     'domestic',
-            timestamp: new Date(item.pubDate || Date.now()),
-          }))
-          .filter(n => n.title.length > 5)
-      : [];
-
   // 합산 후 최신순 정렬
   return [
     ...googleItems,
-    ...parseNewspim(rNewspimEco, 'newspim-eco'),
-    ...parseNewspim(rNewspimFin, 'newspim-fin'),
-    ...parseGeneric(rMT, 'mt', '머니투데이'),
-    ...parseGeneric(rMK, 'mk', '매일경제'),
+    ...parseFeedItems(newspimEcoFeed, 'newspim-eco', '뉴스핌'),
+    ...parseFeedItems(newspimFinFeed, 'newspim-fin', '뉴스핌'),
+    ...parseFeedItems(mtFeed,         'mt',          '머니투데이'),
+    ...parseFeedItems(mkFeed,         'mk',          '매일경제'),
   ].sort((a, b) => b.timestamp - a.timestamp);
 }
 
@@ -366,14 +363,14 @@ function extractRssSource(title = '') {
 // ── Track 3: 공시/시황 (연합뉴스 경제) ───────────────────────────────────────
 
 async function fetchDisclosureNews() {
-  const feed = await rssParser.parseURL(RSS.YONHAP);
+  const feed = await safeRssFetch('연합뉴스', () => rssParser.parseURL(RSS.YONHAP), { items: [] });
   const cutoff = new Date(Date.now() - MAX_NEWS_AGE_MS);
 
   return (feed.items ?? [])
     .filter(item => new Date(item.pubDate) >= cutoff)
     .map(item => ({
       newsId:    `yna-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
-      title:     (item.title || '').trim(),
+      title:     decodeHtml((item.title || '').trim()),
       source:    '연합뉴스',
       url:       item.link || '',
       track:     'disclosure',
