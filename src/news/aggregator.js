@@ -442,7 +442,8 @@ async function aggregateAndSave() {
     console.log(`[News] DB insert: ${result.length}건 신규`);
   } catch (e) {
     if (e.name === 'MongoBulkWriteError' || e.code === 11000) {
-      console.log(`[News] DB insert (일부 중복): ${e.result?.nInserted ?? '?'}건 신규`);
+      const inserted = e.insertedCount ?? e.result?.insertedCount ?? e.result?.nInserted ?? (toSave.length - (e.writeErrors?.length ?? 0));
+      console.log(`[News] DB insert (일부 중복): ${inserted}건 신규`);
     } else {
       console.error('[News] DB insert 실패:', e.message);
       return [];
