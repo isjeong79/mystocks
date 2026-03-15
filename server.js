@@ -238,6 +238,16 @@ async function main() {
       }
     }, 1000);
 
+    // accessToken 23시간마다 갱신 (KIS 토큰 유효기간 24시간)
+    setInterval(async () => {
+      try {
+        await fetchAccessToken();
+        console.log('[KIS] accessToken 자동 갱신 완료');
+      } catch (e) {
+        console.error('[KIS] accessToken 자동 갱신 실패:', e.message);
+      }
+    }, 23 * 60 * 60 * 1000);
+
     // 장 중 KOSPI/KOSDAQ 지수 1분마다 REST 갱신
     setInterval(async () => {
       if (getAccessToken() && isDomesticOpen()) {

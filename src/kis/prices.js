@@ -33,7 +33,7 @@ async function fetchKisStockPrices(watchlistItems) {
         broadcast.broadcast({ type: 'stock', code: item.code, price, sign, change, changeRate, dir });
       }
     } catch (e) {
-      console.error(`[KIS REST] ${item.name} 실패:`, e.message);
+      console.error(`[KIS REST] ${item.name} 실패:`, e.message, e.response?.data ?? '');
     }
     await delay(500);
   }
@@ -75,7 +75,7 @@ async function fetchInitialForeignPrices(watchlistItems) {
         broadcast.broadcast({ type: 'us_etf', symbol: item.symbol, name: item.name, ...data });
       }
     } catch (e) {
-      console.error(`[KIS REST] 해외주식 ${item.symbol} 실패:`, e.message);
+      console.error(`[KIS REST] 해외주식 ${item.symbol} 실패:`, e.message, e.response?.data ?? '');
     }
     await delay(400);
   }
@@ -137,7 +137,7 @@ async function fetchKisIndexPrices() {
       state.indices[key] = { price, change, changeRate, dir };
       broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
     } catch (e) {
-      console.error(`[KIS REST] 지수 ${key} 실패:`, e.message);
+      console.error(`[KIS REST] 지수 ${key} 실패:`, e.message, e.response?.data ?? '');
     }
     await delay(300);
   }

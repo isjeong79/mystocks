@@ -44,7 +44,7 @@ async function refreshForex() {
         data = { rate, change, changeRate, dir: signToDir(sign) };
       }
     } catch (e) {
-      console.error('[KIS 환율] 실패:', e.message);
+      console.error('[KIS 환율] 실패:', e.message, e.response?.data ?? '');
     }
   }
 
