@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const { KIS_WS_URL } = require('../config');
-const { getApprovalKey } = require('./auth');
+const { getApprovalKey, fetchApprovalKey } = require('./auth');
 const { getUsMarketSession, foreignTrKey } = require('./session');
 const { signToDir } = require('../utils');
 const state     = require('../state');
@@ -61,6 +61,12 @@ function connectKis(getWatchlistItems) {
         const trId = json.header?.tr_id;
         if (trId === 'PINGPONG') {
           kisWs.send(text);
+        } else if (json.body?.msg_cd === 'OPSP0011') {
+          // approvalKey 만료 → 재발급 후 재연결
+          console.warn('[KIS WS] approvalKey 만료 → 재발급 후 재연결');
+          fetchApprovalKey()
+            .then(() => { if (kisWs?.readyState === WebSocket.OPEN) kisWs.close(); })
+            .catch(e => console.error('[KIS WS] approvalKey 재발급 실패:', e.message));
         } else {
           console.log(`[KIS WS JSON] tr_id=${trId}`, JSON.stringify(json.body ?? json).substring(0, 250));
         }
