@@ -348,7 +348,7 @@
 </div>
 
 <!-- 종목 데이터 업데이트 -->
-<div id="update-section">
+<div id="update-section" style="display:none">
   <button id="btn-update-stocks">종목데이터 업데이트</button>
   <span id="update-status"></span>
 </div>
@@ -395,6 +395,7 @@
     document.getElementById('user-name').style.display = 'inline';
     document.getElementById('btn-logout').style.display = '';
     document.getElementById('btn-open-auth').style.display = 'none';
+    document.getElementById('update-section').style.display = user.username === '쑤' ? '' : 'none';
     reconnectWS();
   }
 
@@ -402,6 +403,7 @@
     document.getElementById('btn-open-auth').style.display = '';
     document.getElementById('user-name').style.display = 'none';
     document.getElementById('btn-logout').style.display = 'none';
+    document.getElementById('update-section').style.display = 'none';
   }
 
   // 로그아웃
@@ -453,6 +455,7 @@
   const btnUpdate    = document.getElementById('btn-update-stocks');
   const updateStatus = document.getElementById('update-status');
   btnUpdate.onclick  = async () => {
+    if (!confirm('업데이트 하시겠습니까?')) return;
     btnUpdate.disabled = true;
     updateStatus.textContent = '업데이트 시작 중...';
     try {
