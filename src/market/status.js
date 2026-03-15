@@ -60,8 +60,8 @@ function getUsStatus() {
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
-  // 월요일 자정~regClose: 직전날(일요일)에 장이 없으므로 휴장
-  if (dow === 1 && hm < regClose) {
+  // 월요일 자정~preOpen: 일요일 장 없으므로 프리마켓 시작 전까지 전구간 휴장
+  if (dow === 1 && hm < preOpen) {
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
