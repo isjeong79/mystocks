@@ -77,4 +77,4 @@ function isNightFuturesOpen() {
   return true;
 }
 
-module.exports = { refreshHolidays, isNightFuturesOpen };
+module.exports = { refreshHolidays, isNightFuturesOpen, isKstHoliday: _isKstHoliday };
