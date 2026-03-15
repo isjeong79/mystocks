@@ -102,21 +102,30 @@ async function translateWithGemini(texts) {
     '반드시 JSON 배열(문자열만)로만 응답하세요. 설명, 코드블록 없이 순수 JSON만.\n' +
     JSON.stringify(texts);
 
-  try {
-    const res = await axios.post(
-      `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      { contents: [{ parts: [{ text: prompt }] }] },
-      { timeout: GEMINI_TIMEOUT },
-    );
-
-    const raw = res.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return texts;
-    const parsed = JSON.parse(match[0]);
-    return Array.isArray(parsed) ? parsed : texts;
-  } catch (e) {
-    console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
-    return texts;
+  // 429 rate-limit 시 최대 2회 재시도 (10초, 20초 대기)
+  const delays = [10_000, 20_000];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      const res = await axios.post(
+        `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        { contents: [{ parts: [{ text: prompt }] }] },
+        { timeout: GEMINI_TIMEOUT },
+      );
+      const raw = res.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (!match) return texts;
+      const parsed = JSON.parse(match[0]);
+      return Array.isArray(parsed) ? parsed : texts;
+    } catch (e) {
+      const is429 = e.response?.status === 429;
+      if (is429 && attempt < delays.length) {
+        console.warn(`[News] Gemini 429 rate-limit, ${delays[attempt]/1000}초 후 재시도...`);
+        await new Promise(r => setTimeout(r, delays[attempt]));
+        continue;
+      }
+      console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
+      return texts;
+    }
   }
 }
 
