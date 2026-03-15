@@ -1,5 +1,5 @@
 const { getKstNow } = require('../utils');
-const { isNightFuturesOpen, isKstHoliday } = require('../holidays');
+const { isNightFuturesOpen, isKstHoliday, isUsHoliday } = require('../holidays');
 
 // 서머타임 여부 (미국 DST)
 function isDstActive() {
@@ -42,38 +42,44 @@ function getUsStatus() {
   const hm  = kst.getHours() * 60 + kst.getMinutes();
   const dst = isDstActive();
 
-  const preOpen    = dst ? 17*60    : 18*60;   // 17:00 or 18:00 KST
+  const preOpen    = dst ? 17*60    : 18*60;    // 17:00 or 18:00 KST
   const regOpen    = dst ? 22*60+30 : 23*60+30; // 22:30 or 23:30 KST
-  const regClose   = dst ? 5*60     : 6*60;    // 05:00 or 06:00 KST (다음날)
-  const afterClose = 9*60;                      // 09:00 KST
+  const regClose   = dst ? 5*60     : 6*60;     // 05:00 or 06:00 KST (다음날)
+  const afterClose = 9*60;                       // 09:00 KST
 
-  // 일요일 KST: NYSE는 일요일 거래 없음 (프리마켓·정규장 모두 없음)
-  // KST 일요일 17:00 = EDT 일요일 04:00, 22:30 = EDT 일요일 09:30 → 모두 휴장
-  if (dow === 0) {
-    return { status: 'closed', label: '휴장', color: 'flat' };
-  }
+  // 현재 ET 현지 날짜 (공휴일 체크용)
+  const etOffsetMs = dst ? -4 * 3600000 : -5 * 3600000;
+  const etNow      = new Date(Date.now() + etOffsetMs);
 
-  // 토요일: 자정~장마감(05/06시)은 금요일 정규장 연속, 이후 주말 휴장
+  // 일요일: 항상 휴장
+  if (dow === 0) return { status: 'closed', label: '휴장', color: 'flat' };
+
+  // 토요일: 자정~regClose는 금요일 정규장 연속, 이후 애프터 or 휴장
   if (dow === 6) {
-    if (hm < regClose)   return { status: 'open',   label: '정규장', color: 'up'   };
-    if (hm < afterClose) return { status: 'after',  label: '애프터', color: 'warn' };
+    if (hm < regClose) {
+      if (isUsHoliday(etNow)) return { status: 'closed', label: '휴장', color: 'flat' };
+      return { status: 'open',  label: '정규장', color: 'up'   };
+    }
+    if (hm < afterClose) {
+      if (isUsHoliday(etNow)) return { status: 'closed', label: '휴장', color: 'flat' };
+      return { status: 'after', label: '애프터', color: 'warn' };
+    }
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
   // 월요일 자정~preOpen: 일요일 장 없으므로 프리마켓 시작 전까지 전구간 휴장
-  if (dow === 1 && hm < preOpen) {
-    return { status: 'closed', label: '휴장', color: 'flat' };
-  }
+  if (dow === 1 && hm < preOpen) return { status: 'closed', label: '휴장', color: 'flat' };
 
-  // 금요일 오후 09:00~preOpen: 주말 전 휴장 구간 (프리마켓 없음)
-  if (dow === 5 && hm >= afterClose && hm < preOpen) {
-    return { status: 'closed', label: '휴장', color: 'flat' };
-  }
+  // 금요일 오후 09:00~preOpen: 주말 전 휴장 구간
+  if (dow === 5 && hm >= afterClose && hm < preOpen) return { status: 'closed', label: '휴장', color: 'flat' };
 
-  // 평일 일반 로직 (화~목 자정~05:00은 전날 정규장 연속)
-  if (hm >= regOpen || hm < regClose)        return { status: 'open',  label: '정규장',   color: 'up'   };
-  if (hm >= regClose && hm < afterClose)     return { status: 'after', label: '애프터',   color: 'warn' };
-  if (hm >= preOpen)                         return { status: 'pre',   label: '프리마켓', color: 'warn' };
+  // 미국 공휴일 체크 (평일 거래 구간)
+  if (isUsHoliday(etNow)) return { status: 'closed', label: '휴장', color: 'flat' };
+
+  // 평일 일반 로직
+  if (hm >= regOpen || hm < regClose)    return { status: 'open',  label: '정규장',   color: 'up'   };
+  if (hm >= regClose && hm < afterClose) return { status: 'after', label: '애프터',   color: 'warn' };
+  if (hm >= preOpen)                     return { status: 'pre',   label: '프리마켓', color: 'warn' };
   return { status: 'closed', label: '휴장', color: 'flat' };
 }
 
