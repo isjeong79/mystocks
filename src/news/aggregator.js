@@ -55,6 +55,9 @@ const KEYWORD_RE = new RegExp(GLOBAL_KEYWORDS.join('|'), 'i');
 
 const rssParser = new RSSParser({ timeout: RSS_TIMEOUT });
 
+// Gemini 429 발생 시 쿨다운 타임스탬프 (프로세스 메모리)
+let _geminiCooldownUntil = 0;
+
 // ── Track 1: Finnhub 해외 뉴스 ───────────────────────────────────────────────
 
 async function fetchGlobalNews() {
@@ -80,17 +83,13 @@ async function fetchGlobalNews() {
     .slice(0, 5);
 
   // DB에 이미 저장된 newsId 확인 → 신규 항목만 Gemini 번역
+  // ※ 단순 Map 사용: DB에 있으면 무조건 캐시 재사용 (복잡한 필터는 쿨다운 우회 버그 원인)
   const candidateIds = sliced.map(item => `finnhub-${item.id}`);
   const existing = await News.find(
     { newsId: { $in: candidateIds } },
-    { newsId: 1, title: 1, headline_original: 1 }
+    { newsId: 1, title: 1 }
   ).lean();
-  // headline_original과 title이 같으면 번역 실패로 저장된 것 → 재번역 대상에 포함
-  const existingMap = new Map(
-    existing
-      .filter(n => n.headline_original && n.title !== n.headline_original)
-      .map(n => [n.newsId, n.title])
-  );
+  const existingMap = new Map(existing.map(n => [n.newsId, n.title]));
 
   const newItems = sliced.filter(item => !existingMap.has(`finnhub-${item.id}`));
 
@@ -138,6 +137,13 @@ async function translateWithGemini(items) {
     return items;
   }
 
+  // 429 쿨다운 중이면 Gemini 호출 스킵
+  if (Date.now() < _geminiCooldownUntil) {
+    const mins = Math.ceil((_geminiCooldownUntil - Date.now()) / 60000);
+    console.warn(`[News] Gemini 쿨다운 중 (${mins}분 남음) → 원문 사용`);
+    return items;
+  }
+
   // headline 필드만 번역 요청 (원본 구조 그대로 반환)
   const prompt =
     '아래 JSON 배열에서 headline 값만 한국어로 번역한 뒤, ' +
@@ -172,7 +178,12 @@ async function translateWithGemini(items) {
     console.log(`[News] Gemini 번역 완료: ${result.filter(r => r.headline_ko !== r.headline).length}/${items.length}건`);
     return result;
   } catch (e) {
-    console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
+    if (e.response?.status === 429) {
+      _geminiCooldownUntil = Date.now() + 15 * 60 * 1000; // 15분 쿨다운
+      console.warn('[News] Gemini 429 → 15분 쿨다운 설정');
+    } else {
+      console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
+    }
     return items;
   }
 }
@@ -257,10 +268,19 @@ async function aggregateAndSave() {
   // 중복 제거 (newsId 기준 Map)
   const unique = [...new Map(all.map(n => [n.newsId, n])).values()];
 
+  // 번역 실패한 global 뉴스는 DB 저장 제외
+  // → 다음 주기에 다시 신규로 인식되어 Gemini 재시도
+  // → 영문 제목이 DB에 영구 저장되는 것 방지
+  const toSave = unique.filter(n =>
+    n.track !== 'global' ||
+    !n.headline_original ||
+    n.title !== n.headline_original
+  );
+
   // insertMany with ordered:false → 중복 키 에러 무시, 나머지 삽입
   let inserted = [];
   try {
-    const result = await News.insertMany(unique, { ordered: false, rawResult: true });
+    const result = await News.insertMany(toSave, { ordered: false, rawResult: true });
     // 삽입된 newsId 목록으로 실제 신규 항목 추출
     const insertedIds = new Set(
       (result.insertedIds ? Object.values(result.insertedIds).map(id => id.toString()) : [])
