@@ -74,13 +74,12 @@ async function fetchGlobalNews() {
 
   if (filtered.length === 0) return [];
 
-  // Gemini 배치 번역
-  const headlines  = filtered.map(i => i.headline);
-  const translated = await translateWithGemini(headlines);
+  // Gemini 단 1회 호출로 배열 전체 번역
+  const translated = await translateWithGemini(filtered);
 
-  return filtered.map((item, idx) => ({
+  return translated.map(item => ({
     newsId:    `finnhub-${item.id}`,
-    title:     translated[idx] || item.headline,
+    title:     item.headline_ko || item.headline,
     source:    item.source || 'Finnhub',
     url:       item.url || '',
     track:     'global',
@@ -88,44 +87,49 @@ async function fetchGlobalNews() {
   }));
 }
 
-// ── Track 1 보조: Gemini 번역 ─────────────────────────────────────────────────
+// ── Track 1 보조: Gemini 번역 (단 1회 API 호출로 배열 전체 번역) ───────────────
 
-async function translateWithGemini(texts) {
+/**
+ * Finnhub 뉴스 배열을 받아 headline 필드를 한국어로 번역 후 동일 구조로 반환
+ * 1 RPM 소모 → 2분 수집 주기에서 429 완전 회피
+ */
+async function translateWithGemini(items) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.warn('[News] GEMINI_API_KEY 미설정 → 원문 사용');
-    return texts;
+    return items;
   }
 
+  // headline 필드만 번역 요청 (원본 구조 그대로 반환)
   const prompt =
-    '다음 영어 뉴스 헤드라인을 간결한 한국어로 번역하세요. ' +
-    '반드시 JSON 배열(문자열만)로만 응답하세요. 설명, 코드블록 없이 순수 JSON만.\n' +
-    JSON.stringify(texts);
+    '아래 JSON 배열에서 headline 값만 한국어로 번역한 뒤, ' +
+    '원래와 똑같은 구조의 JSON 배열로 리턴해 줘. ' +
+    '번역된 필드명은 headline_ko로 추가하고, 나머지 필드는 그대로 유지해. ' +
+    '코드블록, 설명 없이 순수 JSON 배열만 응답.\n' +
+    JSON.stringify(items.map(i => ({ id: i.id, headline: i.headline })));
 
-  // 429 rate-limit 시 최대 2회 재시도 (10초, 20초 대기)
-  const delays = [10_000, 20_000];
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
-    try {
-      const res = await axios.post(
-        `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-        { contents: [{ parts: [{ text: prompt }] }] },
-        { timeout: GEMINI_TIMEOUT },
-      );
-      const raw = res.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
-      const match = raw.match(/\[[\s\S]*\]/);
-      if (!match) return texts;
-      const parsed = JSON.parse(match[0]);
-      return Array.isArray(parsed) ? parsed : texts;
-    } catch (e) {
-      const is429 = e.response?.status === 429;
-      if (is429 && attempt < delays.length) {
-        console.warn(`[News] Gemini 429 rate-limit, ${delays[attempt]/1000}초 후 재시도...`);
-        await new Promise(r => setTimeout(r, delays[attempt]));
-        continue;
-      }
-      console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
-      return texts;
-    }
+  try {
+    const res = await axios.post(
+      `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      { contents: [{ parts: [{ text: prompt }] }] },
+      { timeout: GEMINI_TIMEOUT },
+    );
+    const raw   = res.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
+    const match = raw.match(/\[[\s\S]*?\]/);
+    if (!match) return items;
+
+    const translated = JSON.parse(match[0]);
+    if (!Array.isArray(translated)) return items;
+
+    // id 기준으로 원본과 병합
+    const map = new Map(translated.map(t => [String(t.id), t.headline_ko]));
+    return items.map(item => ({
+      ...item,
+      headline_ko: map.get(String(item.id)) || item.headline,
+    }));
+  } catch (e) {
+    console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
+    return items;
   }
 }
 
