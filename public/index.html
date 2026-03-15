@@ -4,300 +4,38 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>AFM 실시간 주식 대시보드</title>
-  <style>
-    :root {
-      --bg: #0d1117; --card: #161b22; --card2: #1c2128;
-      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
-      --up: #f85149; --down: #388bfd; --flat: #8b949e;
-      --accent: #58a6ff; --green: #3fb950;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif; min-height: 100vh; padding: 16px; }
-
-    h1 { font-size: 1.1rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-    #status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
-    #status.connected { background: var(--green); }
-    #status.error { background: var(--up); }
-
-    h2 { font-size: 0.72rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 8px; }
-
-    #market-notice { display: none; background: #21262d; border: 1px solid #f0883e; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; color: #f0883e; font-size: 0.85rem; }
-
-    /* ── 종목 그리드 ── */
-    .stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); gap: 10px; }
-
-    .stock-card {
-      position: relative; min-width: 0;
-      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 14px 12px;
-      transition: border-color 0.2s;
-    }
-    .stock-card:hover { border-color: #484f58; }
-
-    .stock-name { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 22px; }
-    .stock-currency { font-size: 0.62rem; color: #484f58; vertical-align: middle; margin-left: 3px; }
-    .stock-price { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
-    .stock-change { font-size: 0.75rem; margin-top: 3px; }
-
-    /* ── 삭제 버튼 (항상 표시) ── */
-    .remove-btn {
-      position: absolute; top: 6px; right: 6px;
-      background: none; border: none; color: var(--muted); cursor: pointer;
-      font-size: 12px; width: 22px; height: 22px; border-radius: 4px;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 1; transition: color 0.15s, background 0.15s;
-      line-height: 1; -webkit-tap-highlight-color: transparent;
-    }
-    .remove-btn:hover, .remove-btn:active { color: var(--up); background: rgba(248,81,73,0.12); }
-
-    /* 모바일: 터치 영역 확대 */
-    @media (hover: none) {
-      .remove-btn {
-        width: 32px; height: 32px; top: 4px; right: 4px;
-        font-size: 13px;
-      }
-    }
-
-    /* ── 추가 카드 ── */
-    .add-card {
-      background: transparent; border: 1.5px dashed var(--border); border-radius: 10px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      cursor: pointer; min-height: 90px; transition: border-color 0.2s, color 0.2s;
-      color: var(--muted); gap: 4px; -webkit-tap-highlight-color: transparent;
-    }
-    .add-card:hover, .add-card:active { border-color: var(--accent); color: var(--accent); }
-    .add-icon { font-size: 1.6rem; line-height: 1; font-weight: 300; }
-    .add-label { font-size: 0.7rem; }
-
-    /* ── 색상 ── */
-    .up   { color: var(--up); }
-    .down { color: var(--down); }
-    .flat { color: var(--muted); }
-
-    /* ── 정보 그리드 ── */
-    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-    .info-card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-    .info-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
-    .info-value { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
-    .info-sub { font-size: 0.75rem; margin-top: 4px; }
-
-    /* ── 플래시 ── */
-    @keyframes flash-up   { 0% { background: rgba(248,81,73,0.25); } 100% { background: transparent; } }
-    @keyframes flash-down { 0% { background: rgba(56,139,253,0.25); } 100% { background: transparent; } }
-    .flash-up   { animation: flash-up   0.6s ease-out; }
-    .flash-down { animation: flash-down 0.6s ease-out; }
-
-    /* ── 모달 오버레이 ── */
-    #modal-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(1,4,9,0.75); z-index: 200;
-      align-items: center; justify-content: center;
-    }
-    #modal-overlay.open { display: flex; }
-
-    /* ── 모달 ── */
-    #modal {
-      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-      width: 420px; max-width: 92vw; max-height: 80vh;
-      display: flex; flex-direction: column; overflow: hidden;
-      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
-      /* 키보드 높이만큼 margin-bottom으로 위치 조정 (JS에서 설정) */
-      transition: margin-bottom 0.15s ease;
-    }
-
-    /* 모달 헤더 */
-    #modal-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 18px 20px 0; flex-shrink: 0;
-    }
-    #modal-header span { font-size: 1rem; font-weight: 600; color: var(--text); }
-    #modal-close {
-      background: none; border: none; color: var(--muted); cursor: pointer;
-      font-size: 1.3rem; width: 36px; height: 36px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      transition: color 0.15s, background 0.15s; -webkit-tap-highlight-color: transparent;
-    }
-    #modal-close:hover, #modal-close:active { color: var(--text); background: var(--card2); }
-
-    /* 탭 */
-    #modal-tabs { display: flex; gap: 0; padding: 14px 20px 0; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .modal-tab {
-      background: none; border: none; cursor: pointer;
-      padding: 8px 16px; font-size: 0.88rem; color: var(--muted);
-      border-bottom: 2px solid transparent; margin-bottom: -1px;
-      transition: color 0.15s; font-weight: 500;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-    .modal-tab:hover:not(.active), .modal-tab:active:not(.active) { color: var(--text); }
-
-    /* 검색창 */
-    #modal-search-wrap { padding: 14px 20px 0; flex-shrink: 0; }
-    #search-input {
-      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      padding: 10px 14px; color: var(--text);
-      /* 16px: iOS 자동 확대 방지 */
-      font-size: 16px; outline: none;
-      transition: border-color 0.15s;
-    }
-    #search-input:focus { border-color: var(--accent); }
-    #search-input::placeholder { color: var(--muted); }
-
-    /* 결과 목록 */
-    #search-results { flex: 1; overflow-y: auto; padding: 10px 12px 14px; -webkit-overflow-scrolling: touch; }
-    #search-results::-webkit-scrollbar { width: 4px; }
-    #search-results::-webkit-scrollbar-track { background: transparent; }
-    #search-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    .search-hint { padding: 24px 8px; color: var(--muted); font-size: 0.82rem; text-align: center; }
-
-    .search-result {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 10px; border-radius: 8px; cursor: pointer;
-      transition: background 0.12s;
-    }
-    .search-result:hover:not(.exists), .search-result:active:not(.exists) { background: var(--card2); }
-    .search-result.exists { opacity: 0.45; cursor: default; }
-
-    .result-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .result-name { font-size: 0.88rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
-    .result-meta { font-size: 0.72rem; color: var(--muted); }
-    .result-code { font-weight: 600; }
-
-    .result-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .result-exchange { font-size: 0.68rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
-    .result-add-btn {
-      width: 32px; height: 32px; border-radius: 8px; background: var(--accent);
-      color: #0d1117; border: none; cursor: pointer; font-size: 1.2rem; font-weight: 700;
-      display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s; -webkit-tap-highlight-color: transparent;
-      flex-shrink: 0;
-    }
-    .result-add-btn:hover, .result-add-btn:active { background: #79c0ff; }
-    .result-added { font-size: 0.72rem; color: var(--green); }
-
-    /* ── 사용자 영역 ── */
-    #user-area { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: flex-end; flex-wrap: wrap; }
-    #user-name  { font-size: 0.82rem; color: var(--muted); }
-    #user-name strong { color: var(--accent); }
-    .auth-btn {
-      background: var(--card); border: 1px solid var(--border); border-radius: 6px;
-      color: var(--text); font-size: 0.8rem; padding: 5px 12px; cursor: pointer;
-      transition: border-color 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent;
-    }
-    .auth-btn:hover, .auth-btn:active { border-color: var(--accent); color: var(--accent); }
-
-    /* 로그아웃 버튼 */
-    #btn-logout {
-      background: none; border: 1px solid var(--border); border-radius: 6px;
-      color: var(--muted); font-size: 0.75rem; padding: 4px 10px; cursor: pointer;
-      transition: border-color 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent;
-    }
-    #btn-logout:hover, #btn-logout:active { border-color: var(--up); color: var(--up); }
-
-    /* ── 인증 모달 ── */
-    #auth-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(1,4,9,0.75); z-index: 300;
-      align-items: center; justify-content: center;
-    }
-    #auth-overlay.open { display: flex; }
-    #auth-modal {
-      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-      width: 320px; max-width: 92vw; padding: 24px;
-      box-shadow: 0 24px 48px rgba(0,0,0,0.6);
-    }
-    #auth-modal h3 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
-    #auth-input {
-      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      padding: 10px 14px; color: var(--text);
-      /* 16px: iOS 자동 확대 방지 */
-      font-size: 16px; outline: none;
-      transition: border-color 0.15s; margin-bottom: 12px;
-    }
-    #auth-input:focus { border-color: var(--accent); }
-    #auth-input::placeholder { color: var(--muted); }
-    #auth-error { font-size: 0.78rem; color: var(--up); margin-bottom: 10px; min-height: 18px; }
-    .auth-actions { display: flex; gap: 8px; }
-    .auth-action-btn {
-      flex: 1; padding: 10px; border-radius: 7px; border: none; cursor: pointer;
-      font-size: 0.85rem; font-weight: 600; transition: background 0.15s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #btn-register { background: var(--accent); color: #0d1117; }
-    #btn-register:hover, #btn-register:active { background: #79c0ff; }
-    #btn-login    { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
-    #btn-login:hover, #btn-login:active { border-color: var(--accent); color: var(--accent); }
-    #btn-auth-cancel { background: none; border: 1px solid var(--border); color: var(--muted); flex: none; padding: 10px 14px; }
-
-    /* ── 업데이트 버튼 ── */
-    #update-section { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    #btn-update-stocks {
-      background: var(--card2); border: 1px solid var(--border); border-radius: 7px;
-      color: var(--muted); font-size: 0.8rem; padding: 7px 16px; cursor: pointer;
-      transition: border-color 0.15s, color 0.15s;
-    }
-    #btn-update-stocks:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-    #btn-update-stocks:disabled { opacity: 0.5; cursor: default; }
-    #update-status { font-size: 0.75rem; color: var(--muted); }
-
-    /* ── 야간선물 휴장 뱃지 ── */
-    .closed-badge {
-      font-size: 0.6rem; background: #21262d; border: 1px solid var(--muted);
-      color: var(--muted); border-radius: 3px; padding: 1px 5px;
-      vertical-align: middle; margin-left: 5px;
-    }
-
-    /* ── 모바일 반응형 ── */
-    html, body { max-width: 100%; overflow-x: hidden; }
-    @media (max-width: 500px) {
-      body { padding: 10px; }
-      .stock-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-      .info-grid  { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-      .stock-card, .add-card { padding: 10px 8px 9px; min-height: 80px; }
-      .info-card  { padding: 12px 10px; }
-      .stock-price, .info-value { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .stock-change, .info-sub  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .stock-name, .info-label, .stock-change, .info-sub { font-size: 0.68rem; }
-      h1 { font-size: 0.9rem; }
-
-      /* 모바일: 모달을 하단 시트로 표시 */
-      #modal-overlay {
-        align-items: flex-end;
-      }
-      #modal {
-        width: 100%;
-        max-width: 100%;
-        /* dvh: 키보드를 제외한 실제 가시 높이 자동 반영 (iOS 15.4+, Android Chrome 108+) */
-        max-height: min(85vh, 85dvh);
-        border-radius: 20px 20px 0 0;
-        margin: 0;
-        padding-bottom: env(safe-area-inset-bottom, 0px);
-      }
-    }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/cards.css" />
+  <link rel="stylesheet" href="css/modal.css" />
+  <link rel="stylesheet" href="css/market-float.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
 </head>
 <body>
 
-<h1><span id="status"></span> 대박나자! AFM 실시간 주식 대시보드</h1>
-
-<!-- 사용자 영역 -->
-<div id="user-area">
-  <span id="user-name" style="display:none"></span>
-  <button id="btn-logout" style="display:none">로그아웃</button>
-  <button class="auth-btn" id="btn-open-auth">사용자 등록 / 로그인</button>
-</div>
+<h1>
+  <span id="status"></span>AFM 실시간 주식 대시보드
+  <div id="user-area">
+    <span id="user-name" style="display:none"></span>
+    <button id="btn-logout" style="display:none">로그아웃</button>
+    <button class="auth-btn" id="btn-open-auth">로그인</button>
+  </div>
+</h1>
 
 <div id="market-notice"></div>
 
 <!-- 인증 모달 -->
 <div id="auth-overlay">
   <div id="auth-modal">
-    <h3>사용자 등록 / 로그인</h3>
+    <h3>로그인</h3>
     <input type="text" id="auth-input" placeholder="사용자명 입력" maxlength="20" autocomplete="off" />
     <div id="auth-error"></div>
     <div class="auth-actions">
-      <button class="auth-action-btn" id="btn-register">등록</button>
       <button class="auth-action-btn" id="btn-login">로그인</button>
+      <button class="auth-action-btn" id="btn-register">신규등록</button>      
       <button class="auth-action-btn auth-btn" id="btn-auth-cancel">취소</button>
     </div>
   </div>
@@ -311,12 +49,12 @@
 <h2>원자재 &amp; 환율</h2>
 <div class="info-grid">
   <div class="info-card" id="card-WTI">
-    <div class="info-label">WTI 원유 (USD/배럴)</div>
+    <div class="info-label">WTI 원유</div>
     <div class="info-value flat" id="wti-price">-</div>
     <div class="info-sub flat"   id="wti-change">-</div>
   </div>
   <div class="info-card" id="card-BRENT">
-    <div class="info-label">브렌트 원유 (USD/배럴)</div>
+    <div class="info-label">브렌트 원유</div>
     <div class="info-value flat" id="brent-price">-</div>
     <div class="info-sub flat"   id="brent-change">-</div>
   </div>
@@ -341,13 +79,13 @@
     <div class="info-sub flat"   id="kosdaq-change">-</div>
   </div>
   <div class="info-card" id="card-KOSPI_NIGHT">
-    <div class="info-label">코스피 야간선물<span id="fut-closed" class="closed-badge" style="display:none">휴장</span></div>
+    <div class="info-label">코스피 야간선물</div>
     <div class="info-value flat" id="fut-price">-</div>
     <div class="info-sub flat"   id="fut-change">-</div>
   </div>
 </div>
 
-<!-- 종목 데이터 업데이트 -->
+<!-- 종목 데이터 업데이트 (관리자 전용) -->
 <div id="update-section" style="display:none">
   <button id="btn-update-stocks">종목데이터 업데이트</button>
   <span id="update-status"></span>
@@ -358,14 +96,14 @@
   <div id="modal">
     <div id="modal-header">
       <span>종목 추가</span>
-      <button id="modal-close" onclick="closeModal()">✕</button>
+      <button id="modal-close">✕</button>
     </div>
     <div id="modal-tabs">
-      <button class="modal-tab active" data-tab="domestic" onclick="setTab('domestic')">국내주식</button>
-      <button class="modal-tab"        data-tab="foreign"  onclick="setTab('foreign')">해외주식</button>
+      <button class="modal-tab active" data-tab="domestic">국내주식</button>
+      <button class="modal-tab"        data-tab="foreign">해외주식</button>
     </div>
     <div id="modal-search-wrap">
-      <input type="text" id="search-input" placeholder="종목명 또는 종목코드 검색" oninput="onSearchInput()" autocomplete="off" />
+      <input type="text" id="search-input" placeholder="종목명 또는 종목코드 검색" autocomplete="off" />
     </div>
     <div id="search-results">
       <div class="search-hint">종목명이나 코드를 입력하세요</div>
@@ -373,443 +111,29 @@
   </div>
 </div>
 
-<script>
-  // ── 사용자 인증 ────────────────────────────────────────────────────────────
-  let currentUser = null; // { userId, username }
+<!-- 시장 상태 플로팅 바 -->
+<div id="market-float">
+  <div id="mf-body">
+    <div class="mf-item item-flat" id="mf-item-dom">
+      <span class="mf-dot mf-flat" id="mf-dom-dot"></span>
+      <span class="mf-title">국내</span>
+      <span class="mf-status mf-flat" id="mf-dom-lbl">-</span>
+    </div>
+    <div class="mf-item item-flat" id="mf-item-us">
+      <span class="mf-dot mf-flat" id="mf-us-dot"></span>
+      <span class="mf-title">미국</span>
+      <span class="mf-status mf-flat" id="mf-us-lbl">-</span>
+    </div>
+    <div class="mf-item item-flat" id="mf-item-fut">
+      <span class="mf-dot mf-flat" id="mf-fut-dot"></span>
+      <span class="mf-title">야선</span>
+      <span class="mf-status mf-flat" id="mf-fut-lbl">-</span>
+    </div>
+  </div>
+  <span id="mf-mini-label">시장상황</span>
+  <button id="mf-toggle">최소화</button>
+</div>
 
-  async function initAuth() {
-    const userId = localStorage.getItem('userId');
-    if (!userId) { showAuthBtn(); return; }
-    try {
-      const res  = await fetch(`/api/auth/me?userId=${userId}`);
-      const data = await res.json();
-      if (data.userId) { setLoggedIn(data); }
-      else             { localStorage.removeItem('userId'); showAuthBtn(); }
-    } catch { showAuthBtn(); }
-  }
-
-  function setLoggedIn(user) {
-    currentUser = user;
-    localStorage.setItem('userId', user.userId);
-    document.getElementById('user-name').innerHTML = `<strong>${escHtml(user.username)}</strong> 님`;
-    document.getElementById('user-name').style.display = 'inline';
-    document.getElementById('btn-logout').style.display = '';
-    document.getElementById('btn-open-auth').style.display = 'none';
-    document.getElementById('update-section').style.display = user.username === '쑤' ? '' : 'none';
-    reconnectWS();
-  }
-
-  function showAuthBtn() {
-    document.getElementById('btn-open-auth').style.display = '';
-    document.getElementById('user-name').style.display = 'none';
-    document.getElementById('btn-logout').style.display = 'none';
-    document.getElementById('update-section').style.display = 'none';
-  }
-
-  // 로그아웃
-  function doLogout() {
-    currentUser = null;
-    localStorage.removeItem('userId');
-    showAuthBtn();
-    watchlistItems = [];
-    reconnectWS();
-  }
-  document.getElementById('btn-logout').onclick = doLogout;
-
-  // 인증 모달
-  document.getElementById('btn-open-auth').onclick = () => {
-    document.getElementById('auth-overlay').classList.add('open');
-    document.getElementById('auth-error').textContent = '';
-    setTimeout(() => document.getElementById('auth-input').focus(), 50);
-  };
-  document.getElementById('btn-auth-cancel').onclick = () => {
-    document.getElementById('auth-input').blur();
-    document.getElementById('auth-overlay').classList.remove('open');
-  };
-  document.getElementById('auth-overlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) {
-      document.getElementById('auth-input').blur();
-      document.getElementById('auth-overlay').classList.remove('open');
-    }
-  });
-
-  async function doAuth(endpoint) {
-    const username = document.getElementById('auth-input').value.trim();
-    if (!username) { document.getElementById('auth-error').textContent = '사용자명을 입력하세요.'; return; }
-    try {
-      const res  = await fetch(`/api/auth/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
-      const data = await res.json();
-      if (data.error) { document.getElementById('auth-error').textContent = data.error; return; }
-      document.getElementById('auth-input').blur();
-      document.getElementById('auth-overlay').classList.remove('open');
-      setLoggedIn(data);
-    } catch { document.getElementById('auth-error').textContent = '서버 오류가 발생했습니다.'; }
-  }
-  document.getElementById('btn-register').onclick = () => doAuth('register');
-  document.getElementById('btn-login').onclick    = () => doAuth('login');
-  document.getElementById('auth-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doAuth('login');
-  });
-
-  // ── 종목 데이터 업데이트 버튼 ────────────────────────────────────────────
-  const btnUpdate    = document.getElementById('btn-update-stocks');
-  const updateStatus = document.getElementById('update-status');
-  btnUpdate.onclick  = async () => {
-    if (!confirm('업데이트 하시겠습니까?')) return;
-    btnUpdate.disabled = true;
-    updateStatus.textContent = '업데이트 시작 중...';
-    try {
-      await fetch('/api/stocks/update', { method: 'POST' });
-      updateStatus.textContent = '다운로드 중... (완료 시 알림)';
-    } catch {
-      updateStatus.textContent = '요청 실패';
-      btnUpdate.disabled = false;
-    }
-  };
-
-  // ── WebSocket ──────────────────────────────────────────────────────────────
-  const WS_BASE = (() => {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${location.host}`;
-  })();
-  const statusEl  = document.getElementById('status');
-  const noticeEl  = document.getElementById('market-notice');
-  let ws, retryDelay = 1000;
-
-  function wsUrl() {
-    return currentUser ? `${WS_BASE}?userId=${currentUser.userId}` : WS_BASE;
-  }
-
-  function reconnectWS() {
-    if (ws) { ws.onclose = null; ws.close(); }
-    retryDelay = 1000;
-    connect();
-  }
-
-  function connect() {
-    ws = new WebSocket(wsUrl());
-    ws.onopen  = () => { statusEl.className = 'connected'; retryDelay = 1000; };
-    ws.onerror = () => { statusEl.className = 'error'; };
-    ws.onclose = () => {
-      statusEl.className = '';
-      setTimeout(() => { retryDelay = Math.min(retryDelay * 2, 30000); connect(); }, retryDelay);
-    };
-    ws.onmessage = e => {
-      let msg; try { msg = JSON.parse(e.data); } catch (_) { return; }
-      switch (msg.type) {
-        case 'init':
-          renderWatchlist(msg.watchlist || []);
-          if (msg.state?.forex?.USDKRW?.rate != null)        { const d = msg.state.forex.USDKRW;        updateForex({ ...d, dir: calcDir(d.change) }); }
-          if (msg.state?.commodities?.WTI?.price != null)    { const d = msg.state.commodities.WTI;    updateCommodity({ symbol: 'WTI',   name: 'WTI 원유',    ...d, dir: calcDir(d.change) }); }
-          if (msg.state?.commodities?.BRENT?.price != null)  { const d = msg.state.commodities.BRENT;  updateCommodity({ symbol: 'BRENT', name: '브렌트 원유', ...d, dir: calcDir(d.change) }); }
-          if (msg.state?.futures?.KOSPI_NIGHT?.price != null) { const d = msg.state.futures.KOSPI_NIGHT; updateFutures({ ...d, dir: calcDir(d.change) }); }
-          if (msg.state?.indices?.KOSPI?.price  != null) { updateIndex({ key: 'KOSPI',  ...msg.state.indices.KOSPI  }); }
-          if (msg.state?.indices?.KOSDAQ?.price != null) { updateIndex({ key: 'KOSDAQ', ...msg.state.indices.KOSDAQ }); }
-          break;
-        case 'watchlist_updated': renderWatchlist(msg.watchlist); break;
-        case 'stock':     updateStockCard(msg);   noticeEl.style.display = 'none'; break;
-        case 'us_etf':    updateEtfCard(msg);     break;
-        case 'commodity': updateCommodity(msg);   break;
-        case 'forex':     updateForex(msg);       break;
-        case 'futures':   updateFutures(msg);     break;
-        case 'index':     updateIndex(msg);       break;
-        case 'market_closed': noticeEl.textContent = msg.message; noticeEl.style.display = 'block'; break;
-        case 'stock_update_progress':
-          updateStatus.textContent = msg.message.replace('[종목로더] ', '');
-          break;
-        case 'stock_update_done':
-          btnUpdate.disabled = false;
-          if (msg.success) {
-            const s = msg.stats;
-            updateStatus.textContent = `완료: 국내 ${s.domestic}개, 해외 ${s.foreign}개`;
-          } else {
-            updateStatus.textContent = `오류: ${msg.message}`;
-          }
-          break;
-      }
-    };
-  }
-
-  // 페이지 로드 시 인증 확인 후 WS 연결
-  initAuth().then(() => { if (!currentUser) connect(); });
-
-  // ── 포맷 ───────────────────────────────────────────────────────────────────
-  const calcDir = c => c > 0 ? 'up' : c < 0 ? 'down' : 'flat';
-  const fmtKRW = n => n == null ? '-' : n.toLocaleString('ko-KR') + '원';
-  const fmtUSD = n => n == null ? '-' : '$' + n.toFixed(2);
-  const fmtFX  = n => n == null ? '-' : n.toLocaleString('ko-KR', { minimumFractionDigits: 2 }) + '원';
-
-  function fmtChange(c, r, dir, isKRW = true) {
-    if (c == null) return '-';
-    const sign = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
-    const val  = isKRW ? Math.abs(c).toLocaleString('ko-KR') : Math.abs(c).toFixed(2);
-    return `${sign} ${val} (${Math.abs(r ?? 0).toFixed(2)}%)`;
-  }
-
-  // ── DOM 헬퍼 ──────────────────────────────────────────────────────────────
-  function flashEl(el, dir) {
-    el.classList.remove('flash-up', 'flash-down');
-    void el.offsetWidth;
-    if (dir === 'up')   el.classList.add('flash-up');
-    if (dir === 'down') el.classList.add('flash-down');
-  }
-  function setClass(el, dir) {
-    el.className = el.className.replace(/\b(up|down|flat)\b/g, '').trim();
-    el.classList.add(dir === 'up' ? 'up' : dir === 'down' ? 'down' : 'flat');
-  }
-
-  // 값이 바뀌었을 때만 플래시
-  const _prev = {};
-  function flashIfChanged(el, dir, key, newVal) {
-    if (_prev[key] === newVal) return;
-    _prev[key] = newVal;
-    flashEl(el, dir);
-  }
-
-  // ── 워치리스트 렌더링 ──────────────────────────────────────────────────────
-  // 현재 워치리스트 항목을 JS 배열로 추적 (DOM 의존 제거)
-  let watchlistItems = [];
-
-  function renderWatchlist(watchlist) {
-    watchlistItems = watchlist || [];
-    const grid = document.getElementById('stockGrid');
-    grid.innerHTML = '';
-    watchlistItems.forEach(item => grid.appendChild(createCard(item)));
-    // + 추가 카드
-    const add = document.createElement('div');
-    add.className = 'stock-card add-card';
-    add.onclick = openModal;
-    add.innerHTML = `<div class="add-icon">＋</div><div class="add-label">종목 추가</div>`;
-    grid.appendChild(add);
-  }
-
-  function createCard(item) {
-    const isKRW = item.type === 'domestic';
-    const cardId = isKRW ? `card-d-${item.code}` : `card-f-${item.symbol}`;
-    const dir   = item.dir ?? (item.change == null ? 'flat' : item.change > 0 ? 'up' : item.change < 0 ? 'down' : 'flat');
-    const price = item.price;
-    const div   = document.createElement('div');
-    div.className = 'stock-card';
-    div.id = cardId;
-    div.dataset.type = item.type;
-    div.dataset.id   = isKRW ? item.code : item.symbol;
-    div.innerHTML = `
-      <button class="remove-btn" title="삭제">✕</button>
-      <div class="stock-name">${item.name}${isKRW ? '' : '<span class="stock-currency">USD</span>'}</div>
-      <div class="stock-price ${dir}">${price == null ? '-' : isKRW ? fmtKRW(price) : fmtUSD(price)}</div>
-      <div class="stock-change ${dir}">${fmtChange(item.change, item.changeRate, dir, isKRW)}</div>
-    `;
-    div.querySelector('.remove-btn').onclick = e => {
-      e.stopPropagation();
-      sendWS(isKRW
-        ? { type: 'remove_stock', stockType: 'domestic', code: item.code }
-        : { type: 'remove_stock', stockType: 'foreign',  symbol: item.symbol });
-    };
-    return div;
-  }
-
-  function updateStockCard({ code, price, sign, change, changeRate, dir }) {
-    const card = document.querySelector(`[data-type="domestic"][data-id="${code}"]`);
-    if (!card) return;
-    const priceEl  = card.querySelector('.stock-price');
-    const changeEl = card.querySelector('.stock-change');
-    priceEl.textContent  = fmtKRW(price);
-    changeEl.textContent = fmtChange(change, changeRate, dir, true);
-    setClass(priceEl, dir); setClass(changeEl, dir);
-    flashIfChanged(card, dir, `d-${code}`, price);
-  }
-
-  function updateEtfCard({ symbol, price, change, changeRate, dir }) {
-    const card = document.querySelector(`[data-type="foreign"][data-id="${symbol}"]`);
-    if (!card) return;
-    const priceEl  = card.querySelector('.stock-price');
-    const changeEl = card.querySelector('.stock-change');
-    priceEl.textContent  = fmtUSD(price);
-    changeEl.textContent = fmtChange(change, changeRate, dir, false);
-    setClass(priceEl, dir); setClass(changeEl, dir);
-    flashIfChanged(card, dir, `f-${symbol}`, price);
-  }
-
-  // ── 원자재 / 환율 / 선물 ──────────────────────────────────────────────────
-  function updateCommodity({ symbol, price, change, changeRate, dir }) {
-    const s        = symbol === 'WTI' ? 'wti' : 'brent';
-    const priceEl  = document.getElementById(`${s}-price`);
-    const changeEl = document.getElementById(`${s}-change`);
-    const card     = document.getElementById(`card-${symbol}`);
-    if (!priceEl) return;
-    priceEl.textContent  = fmtUSD(price);
-    changeEl.textContent = fmtChange(change, changeRate, dir, false);
-    setClass(priceEl, dir); setClass(changeEl, dir);
-    if (card) flashIfChanged(card, dir, `commodity-${symbol}`, price);
-  }
-
-  function updateForex({ rate, change, changeRate, dir }) {
-    const priceEl  = document.getElementById('fx-price');
-    const changeEl = document.getElementById('fx-change');
-    const card     = document.getElementById('card-USDKRW');
-    priceEl.textContent  = fmtFX(rate);
-    changeEl.textContent = fmtChange(change, changeRate, dir, true);
-    setClass(priceEl, dir); setClass(changeEl, dir);
-    flashIfChanged(card, dir, 'forex-USDKRW', rate);
-  }
-
-  function updateIndex({ key, price, change, changeRate, dir }) {
-    const k        = key.toLowerCase(); // 'kospi' or 'kosdaq'
-    const priceEl  = document.getElementById(`${k}-price`);
-    const changeEl = document.getElementById(`${k}-change`);
-    const card     = document.getElementById(`card-${key}`);
-    if (!priceEl) return;
-    priceEl.textContent  = price == null ? '-' : price.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    changeEl.textContent = fmtChange(change, changeRate, dir, false);
-    setClass(priceEl, dir); setClass(changeEl, dir);
-    flashIfChanged(card, dir, `index-${key}`, price);
-  }
-
-  function updateFutures({ price, change, changeRate, dir, closed }) {
-    const priceEl   = document.getElementById('fut-price');
-    const changeEl  = document.getElementById('fut-change');
-    const card      = document.getElementById('card-KOSPI_NIGHT');
-    const closedEl  = document.getElementById('fut-closed');
-    priceEl.textContent  = price == null ? '-' : price.toFixed(2);
-    changeEl.textContent = fmtChange(change, changeRate, dir, false);
-    setClass(priceEl, dir); setClass(changeEl, dir);
-    if (closedEl) closedEl.style.display = closed ? 'inline' : 'none';
-    if (!closed) flashIfChanged(card, dir, 'futures-KOSPI_NIGHT', price);
-  }
-
-  // ── 모달 ──────────────────────────────────────────────────────────────────
-  let currentTab = 'domestic', searchTimer = null;
-
-  // 모바일 키보드 대응: overlay 위치는 건드리지 않고 modal의 margin-bottom만 조정
-  // → 탭 전환 시 overlay 재배치로 인한 팝업 사라짐 현상 방지
-  function adjustModalForKeyboard() {
-    if (!window.visualViewport || window.innerWidth > 500) return;
-    const overlay = document.getElementById('modal-overlay');
-    if (!overlay.classList.contains('open')) return;
-    const vv = window.visualViewport;
-    // 키보드 높이 = 전체 뷰포트 - 현재 가시 영역
-    const keyboardH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    document.getElementById('modal').style.marginBottom = keyboardH > 10 ? keyboardH + 'px' : '';
-  }
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', adjustModalForKeyboard);
-    window.visualViewport.addEventListener('scroll', adjustModalForKeyboard);
-  }
-
-  function openModal() {
-    // 항상 국내주식 탭으로 초기화
-    currentTab = 'domestic';
-    document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'domestic'));
-    document.getElementById('search-input').placeholder = '종목명 또는 종목코드 검색';
-    document.getElementById('search-input').value = '';
-    document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
-
-    document.getElementById('modal-overlay').classList.add('open');
-    // 사용자 제스처 컨텍스트 내 동기 호출 → iOS Safari 키보드 자동 표시
-    document.getElementById('search-input').focus();
-  }
-
-  function closeModal() {
-    document.getElementById('search-input').blur();
-    document.getElementById('modal-overlay').classList.remove('open');
-    document.getElementById('modal').style.marginBottom = '';
-    document.getElementById('search-input').value = '';
-    document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
-    // 팝업 닫힌 후 메인화면 최상단으로 이동
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  document.getElementById('modal-overlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal();
-  });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-  function setTab(tab) {
-    currentTab = tab;
-    document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    const input = document.getElementById('search-input');
-    input.placeholder = tab === 'domestic' ? '종목명 또는 종목코드 검색' : '티커 또는 회사명 검색';
-    input.value = '';
-    document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
-    // 탭 전환 후 input 재포커스 → 키보드 그대로 유지
-    requestAnimationFrame(() => input.focus());
-  }
-
-  function onSearchInput() {
-    clearTimeout(searchTimer);
-    const q = document.getElementById('search-input').value.trim();
-    if (!q) { document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>'; return; }
-    document.getElementById('search-results').innerHTML = '<div class="search-hint">검색 중...</div>';
-    searchTimer = setTimeout(() => doSearch(q), 200);
-  }
-
-  async function doSearch(q) {
-    try {
-      const res     = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${currentTab}`);
-      const results = await res.json();
-      renderResults(results);
-    } catch (e) {
-      document.getElementById('search-results').innerHTML = '<div class="search-hint">검색에 실패했습니다</div>';
-    }
-  }
-
-  function renderResults(results) {
-    const el = document.getElementById('search-results');
-    if (!results.length) { el.innerHTML = '<div class="search-hint">검색 결과가 없습니다</div>'; return; }
-    el.innerHTML = results.map(r => {
-      const isDomestic = currentTab === 'domestic';
-      const id   = isDomestic ? r.code   : r.symbol;
-      const type = isDomestic ? 'domestic' : 'foreign';
-      // DOM 의존 없이 watchlistItems 배열로 추가 여부 확인
-      const exists = watchlistItems.some(item =>
-        isDomestic
-          ? item.type === 'domestic' && item.code   === id
-          : item.type === 'foreign'  && item.symbol === id
-      );
-      const name = escHtml(r.name || r.symbol);
-      const sub  = isDomestic ? `<span class="result-code">${r.code}</span>` : `<span class="result-code">${r.symbol}</span> · ${r.typeDisp || ''}`;
-      return `
-        <div class="search-result${exists ? ' exists' : ''}"
-             data-id="${escAttr(id)}" data-type="${type}"
-             data-name="${escAttr(r.name || r.symbol)}"
-             data-exchange="${escAttr(r.exchange || '')}">
-          <div class="result-left">
-            <span class="result-name">${name}</span>
-            <span class="result-meta">${sub}</span>
-          </div>
-          <div class="result-right">
-            <span class="result-exchange">${r.exchange || ''}</span>
-            ${exists
-              ? '<span class="result-added">추가됨</span>'
-              : `<button class="result-add-btn" title="추가">+</button>`}
-          </div>
-        </div>`;
-    }).join('');
-
-    el.querySelectorAll('.search-result:not(.exists) .result-add-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const row      = btn.closest('.search-result');
-        const type     = row.dataset.type;
-        const id       = row.dataset.id;
-        const name     = row.dataset.name;
-        const exchange = row.dataset.exchange;
-        sendWS(type === 'domestic'
-          ? { type: 'add_stock', stockType: 'domestic', code: id,   name }
-          : { type: 'add_stock', stockType: 'foreign',  symbol: id, name, exchange });
-        closeModal();
-      });
-    });
-  }
-
-  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-  // ── WebSocket 송신 ─────────────────────────────────────────────────────────
-  function sendWS(msg) {
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-  }
-</script>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

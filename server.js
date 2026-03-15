@@ -25,6 +25,7 @@ const { refreshCommodities } = require('./src/market/commodities');
 const { refreshForex }       = require('./src/market/forex');
 const { connectEsignalNightFutures } = require('./src/futures/esignal');
 const { refreshHolidays }    = require('./src/holidays');
+const { getAllMarketStatus, isDomesticOpen } = require('./src/market/status');
 
 // ── JSON body 파서 ────────────────────────────────────────────────────────────
 function parseBody(req) {
@@ -114,6 +115,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── 정적 파일 (css/, js/) ──────────────────────────────────────────────
+  if (req.method === 'GET' && (pathname.startsWith('/css/') || pathname.startsWith('/js/'))) {
+    const filePath = path.join(__dirname, 'public', pathname);
+    const ext = path.extname(pathname);
+    const mime = ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : 'text/plain';
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': `${mime}; charset=utf-8` });
+      res.end(data);
+    });
+    return;
+  }
+
   res.writeHead(404); res.end();
 });
 
@@ -129,7 +143,7 @@ clientWss.on('connection', async (ws, req) => {
   console.log(`브라우저 접속${userId ? ` (userId: ${userId})` : ' (비로그인)'}`);
 
   const userItems  = await watchlist.getWatchlistForUser(userId);
-  ws.send(JSON.stringify({ type: 'init', state, watchlist: watchlist.buildWithPrices(userItems) }));
+  ws.send(JSON.stringify({ type: 'init', state, watchlist: watchlist.buildWithPrices(userItems), marketStatus: getAllMarketStatus() }));
 
   ws.on('message', async data => {
     try {
@@ -192,6 +206,25 @@ async function main() {
     connectEsignalNightFutures();
     refreshForex();       setInterval(refreshForex,       5000);
     refreshCommodities(); setInterval(refreshCommodities, 5000);
+
+    // 시장 상태 1초마다 체크 → 변경 시 브로드캐스트
+    let _lastStatusKey = '';
+    setInterval(() => {
+      const status = getAllMarketStatus();
+      const key = `${status.domestic.status}|${status.us.status}|${status.futures.status}`;
+      if (key !== _lastStatusKey) {
+        _lastStatusKey = key;
+        console.log(`[시장상태] ${key}`);
+        broadcast.broadcast({ type: 'market_status', ...status });
+      }
+    }, 1000);
+
+    // 장 중 KOSPI/KOSDAQ 지수 1분마다 REST 갱신
+    setInterval(async () => {
+      if (getAccessToken() && isDomesticOpen()) {
+        await fetchKisIndexPrices().catch(() => {});
+      }
+    }, 60 * 1000);
 
     if (getApprovalKey()) {
       startSessionMonitor(watchlist.getWatchlistItems);

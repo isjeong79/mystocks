@@ -1,0 +1,73 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { max-width: 100%; overflow-x: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+  min-height: 100dvh;
+  padding: 20px 16px 84px;
+}
+
+/* 페이지 상단 배경 글로우 */
+body::before {
+  content: '';
+  position: fixed; top: -100px; left: 50%; transform: translateX(-50%);
+  width: 500px; height: 300px; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(56,189,248,0.055) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── 헤더 ─────────────────────────────────────────────────────────────── */
+h1 {
+  font-size: 1.1rem; font-weight: 700; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(110deg, var(--accent) 0%, var(--green) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+h1 > span:not(#status) { flex: 1; }
+
+#status {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); flex-shrink: 0;
+  /* 그라디언트 상속 차단 */
+  -webkit-text-fill-color: initial; background-clip: initial; -webkit-background-clip: initial;
+}
+#status.connected { background: var(--green); animation: pulse-dot 2.5s ease-in-out infinite; }
+#status.error     { background: var(--up); }
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(74,222,128,0); }
+}
+
+/* ── 섹션 헤더 ───────────────────────────────────────────────────────── */
+h2 {
+  font-size: 0.68rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin: 20px 0 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+h2::before {
+  content: ''; display: block; width: 3px; height: 13px; border-radius: 2px;
+  background: linear-gradient(to bottom, var(--accent), var(--green));
+  flex-shrink: 0;
+}
+
+/* ── 공지 ────────────────────────────────────────────────────────────── */
+#market-notice {
+  display: none;
+  background: rgba(251,146,60,0.08); border: 1px solid rgba(251,146,60,0.3);
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
+  color: var(--warn); font-size: 0.83rem;
+}
+
+/* ── 방향 색상 ───────────────────────────────────────────────────────── */
+.up   { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--muted); }
+
+/* ── 플래시 애니메이션 ───────────────────────────────────────────────── */
+@keyframes flash-up   { 0% { background: rgba(248,113,113,0.18); } 100% { background: transparent; } }
+@keyframes flash-down { 0% { background: rgba(96,165,250,0.18);  } 100% { background: transparent; } }
+.flash-up   { animation: flash-up   0.7s ease-out; }
+.flash-down { animation: flash-down 0.7s ease-out; }
