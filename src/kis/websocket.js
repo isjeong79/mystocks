@@ -44,9 +44,8 @@ function connectKis(getWatchlistItems) {
     const items = getWatchlistItems();
     const ds = getDomesticStatus().status;
     // 구독 한도(40개) 방어: 시장 상태에 따라 종목당 TR 1개만 구독
-    const domTrId = (ds === 'pre')                                          ? 'H1STCNT0'  // NXT 프리마켓
-                  : (ds === 'opening_auction' || ds === 'closing_auction')  ? 'H0STASP0'  // 동시호가 예상체결가
-                  :                                                           'H0STCNT0'; // 정규장 및 기타
+    // H0STASP0(호가)는 이 계정에서 지원 안 됨 → auction 구간도 H0STCNT0 사용, 예상체결가는 REST 폴링으로 처리
+    const domTrId = (ds === 'pre') ? 'H1STCNT0' : 'H0STCNT0';
     console.log(`[KIS WS] 국내종목 구독 TR: ${domTrId} (상태: ${ds})`);
     items.filter(w => w.type === 'domestic').forEach(w => kisWs.send(subMsg(domTrId, w.code)));
     items.filter(w => w.type === 'foreign').forEach(w => {
@@ -55,9 +54,7 @@ function connectKis(getWatchlistItems) {
       kisWs.send(subMsg('HDFSCNT0', trKey));
     });
     kisWs.send(subMsg('H0FOREXS', 'FX@USD'));
-    // 코스피/코스닥 지수 실시간 구독
-    kisWs.send(subMsg('H0STASP0', '0001')); // KOSPI 지수
-    kisWs.send(subMsg('H0STASP0', '1001')); // KOSDAQ 지수
+    // 지수 실시간 WS 구독 제거 — H0STASP0 미지원 계정이므로 REST 1분 폴링으로 대체
   });
 
   kisWs.on('message', data => {
@@ -121,29 +118,7 @@ function connectKis(getWatchlistItems) {
       broadcast.broadcast({ type: 'us_etf', symbol, name: state.usEtfs[symbol].name, price, change, changeRate, dir });
 
     } else if (trId === 'H0STASP0') {
-      const code = f[0];
-      // 지수 구독('0001'/'1001')은 별도 포맷: f[2]=현재지수, f[3]=부호, f[4]=전일대비, f[5]=등락률
-      if (code === '0001' || code === '1001') {
-        const key = code === '0001' ? 'KOSPI' : 'KOSDAQ';
-        const price = parseFloat(f[2]);
-        if (isNaN(price) || !price) return;
-        const sign = f[3], change = parseFloat(f[4]), changeRate = parseFloat(f[5]);
-        const dir  = signToDir(sign);
-        state.indices[key] = { price, change, changeRate, dir };
-        broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
-        return;
-      }
-      // 개별종목 호가 — 동시호가 구간의 예상체결가 사용
-      // KIS 공식 명세: f[47]=예상체결가, f[50]=예상체결대비, f[51]=부호, f[52]=예상체결등락률
-      if (!state.stocks[code]) return;
-      const price = parseFloat(f[47]);
-      if (!price || isNaN(price)) return;
-      const sign       = f[51] ?? '3';
-      const change     = parseFloat(f[50] ?? 0);
-      const changeRate = parseFloat(f[52] ?? 0);
-      const dir        = signToDir(sign);
-      state.stocks[code] = { ...state.stocks[code], price, sign, change, changeRate, dir };
-      broadcast.broadcast({ type: 'stock', code, price, sign, change, changeRate, dir });
+      // 현재 미구독 — 수신 시 무시 (계정 미지원)
 
     } else {
       console.log(`[KIS WS] 미처리 trId=${trId} fields[0-4]:`, f.slice(0, 5));
