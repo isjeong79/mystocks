@@ -245,13 +245,14 @@ async function fetchGlobalNews() {
     { newsId: 1, title: 1, headline_original: 1 }
   ).lean();
 
+  // headline_original이 있으면 이미 번역 시도한 항목 → 성공/실패 무관하게 재번역 안 함
   const existingMap = new Map(
     existing
-      .filter(n => n.headline_original && n.title !== n.headline_original)
+      .filter(n => n.headline_original)
       .map(n => [n.newsId, n.title])
   );
 
-  // 신규 + 번역 미완료 항목 → DeepL 단일 배치
+  // DB에 없는 항목만 DeepL 번역 (한 번 시도 후 결과와 무관하게 캐시)
   const newItems = sliced.filter(item => !existingMap.has(item.newsId));
   let translatedTitles = null;
   if (newItems.length > 0) {
@@ -429,12 +430,8 @@ async function aggregateAndSave() {
   // (title 중복 제거를 여기서 하면 DB에 쌓이는 기사 수가 급감)
   const unique = [...new Map(all.map(n => [n.newsId, n])).values()];
 
-  // 번역 실패한 global 뉴스는 DB 저장 제외 (다음 주기 재시도)
-  const toSave = unique.filter(n =>
-    n.track !== 'global' ||
-    !n.headline_original ||
-    n.title !== n.headline_original
-  );
+  // 번역 성공/실패 무관하게 모두 저장 → 실패 기사를 2분마다 재번역하는 낭비 방지
+  const toSave = unique;
 
   // insertMany ordered:false → 중복 newsId 무시, 신규만 삽입
   try {
