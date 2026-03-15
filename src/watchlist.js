@@ -57,29 +57,29 @@ async function getWatchlistForUser(userId) {
 
 async function addItemToUserWatchlist(userId, item) {
   if (!userId) return;
-  const wl = await WatchlistModel.findOne({ userId });
-  if (!wl) {
-    await WatchlistModel.create({ userId, items: [item] });
-  } else {
-    const key = _itemKey(item);
-    const exists = wl.items.some(i => _itemKey(i) === key);
-    if (!exists) { wl.items.push(item); await wl.save(); }
-  }
+  // $push 원자 연산으로 race condition 방지 (중복 없을 때만 추가)
+  const notExists = item.type === 'domestic'
+    ? { items: { $not: { $elemMatch: { type: 'domestic', code: item.code } } } }
+    : { items: { $not: { $elemMatch: { type: 'foreign', symbol: item.symbol } } } };
+  await WatchlistModel.findOneAndUpdate(
+    { userId, ...notExists },
+    { $push: { items: item } },
+    { upsert: true, new: true },
+  ).catch(() => null); // 이미 존재 시 upsert 충돌 → 정상, 무시
   _addToGlobal(item);
   return getWatchlistForUser(userId);
 }
 
 async function removeItemFromUserWatchlist(userId, { stockType, code, symbol }) {
   if (!userId) return;
-  const wl = await WatchlistModel.findOne({ userId });
-  if (!wl) return [];
-  if (stockType === 'domestic') {
-    wl.items = wl.items.filter(i => !(i.type === 'domestic' && i.code === code));
-  } else {
-    wl.items = wl.items.filter(i => !(i.type === 'foreign' && i.symbol === symbol));
-  }
-  await wl.save();
-  return wl.items;
+  // $pull 원자 연산으로 race condition 방지
+  const pull = stockType === 'domestic'
+    ? { items: { type: 'domestic', code } }
+    : { items: { type: 'foreign', symbol } };
+  const wl = await WatchlistModel.findOneAndUpdate(
+    { userId }, { $pull: pull }, { new: true }
+  );
+  return wl ? wl.items : [];
 }
 
 // ── 가격 정보 병합 ────────────────────────────────────────────────────────────
