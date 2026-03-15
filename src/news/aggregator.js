@@ -56,6 +56,12 @@ const KEYWORD_RE = new RegExp(GLOBAL_KEYWORDS.join('|'), 'i');
 
 const rssParser = new RSSParser({ timeout: RSS_TIMEOUT });
 
+// ── Investing.com 서킷 브레이커 ───────────────────────────────────────────────
+// 403/429/451 차단 감지 시 1시간 쿨다운 → 불필요한 반복 요청 방지
+let _investingCooldownUntil = 0;
+const INVESTING_COOLDOWN_MS  = 60 * 60 * 1000; // 1시간
+const INVESTING_BLOCK_CODES  = new Set([403, 429, 451]);
+
 // ── 유틸: 15자 prefix 중복 제거 ──────────────────────────────────────────────
 
 /**
@@ -125,22 +131,40 @@ async function _fetchCNBCRaw(cutoff) {
 // ── Track 1 서브: Investing.com RSS 원시 수집 ─────────────────────────────────
 
 async function _fetchInvestingRaw(cutoff) {
-  const feed = await rssParser.parseURL(RSS.INVESTING);
-  const cutoffDate = new Date(cutoff);
+  // 차단 쿨다운 중이면 즉시 스킵 (표시/저장/번역 없음)
+  if (Date.now() < _investingCooldownUntil) {
+    const mins = Math.ceil((_investingCooldownUntil - Date.now()) / 60000);
+    throw new Error(`Investing.com 쿨다운 중 (${mins}분 남음)`);
+  }
 
-  return (feed.items ?? [])
-    .filter(item => new Date(item.pubDate || 0) >= cutoffDate)
-    .map(item => {
-      const id = Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40);
-      return {
-        newsId:    `inv-${id}`,
-        headline:  (item.title || '').trim(),
-        source:    'Investing.com',
-        url:       item.link || '',
-        timestamp: new Date(item.pubDate || Date.now()),
-      };
-    })
-    .filter(n => n.headline.length > 5);
+  try {
+    const feed = await rssParser.parseURL(RSS.INVESTING);
+    const cutoffDate = new Date(cutoff);
+
+    return (feed.items ?? [])
+      .filter(item => new Date(item.pubDate || 0) >= cutoffDate)
+      .map(item => {
+        const id = Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40);
+        return {
+          newsId:    `inv-${id}`,
+          headline:  (item.title || '').trim(),
+          source:    'Investing.com',
+          url:       item.link || '',
+          timestamp: new Date(item.pubDate || Date.now()),
+        };
+      })
+      .filter(n => n.headline.length > 5);
+  } catch (e) {
+    // HTTP 상태코드 추출 (rss-parser는 에러 메시지에 코드 포함)
+    const status = e.status ?? e.response?.status
+      ?? (String(e.message).match(/(?:status code\s*|HTTP\s*)(\d{3})/i)?.[1] | 0);
+
+    if (INVESTING_BLOCK_CODES.has(status)) {
+      _investingCooldownUntil = Date.now() + INVESTING_COOLDOWN_MS;
+      console.warn(`[News] Investing.com 차단 감지 (HTTP ${status}) → 1시간 스킵`);
+    }
+    throw e; // Promise.allSettled가 나머지 소스는 정상 처리
+  }
 }
 
 // ── Track 1: 해외 뉴스 통합 (번역 포함) ──────────────────────────────────────
