@@ -39,23 +39,28 @@ export function renderNewsTicker(items) {
   const track = document.getElementById('news-ticker-track');
   if (!track || !items?.length) return;
 
-  const html = items.map(item => buildTickerItem(item)).join(
-    '<span class="ticker-dot" aria-hidden="true">◆</span>'
-  );
+  const sep  = '<span class="ticker-dot" aria-hidden="true">◆</span>';
+  const html = items.map(item => buildTickerItem(item)).join(sep);
 
-  // 콘텐츠 2벌 복제 → translateX(-50%) 무한 루프로 seamless 스크롤
+  // 1단계: 세트 1개만 렌더링해서 실제 픽셀 너비를 측정
+  track.style.animation = 'none';
+  track.innerHTML = `<span class="ticker-set">${html}</span>`;
+  void track.offsetWidth;  // reflow 강제
+
+  const setWidth = track.querySelector('.ticker-set').offsetWidth;
+
+  // 2단계: 세트 2개로 복제 + 측정한 픽셀값을 CSS 변수로 전달 → 정확한 루프
   track.innerHTML = `<span class="ticker-set">${html}</span>` +
                     `<span class="ticker-set" aria-hidden="true">${html}</span>`;
+  track.style.setProperty('--set-width', `${setWidth}px`);
 
-  // 애니메이션 지속시간: 총 글자수 기반 (30~180초)
-  const totalChars = items.reduce((s, n) => s + (n.title?.length ?? 0), 0);
-  const duration   = Math.min(TICKER_MAX_DURATION,
-                    Math.max(TICKER_MIN_DURATION, totalChars / TICKER_CHARS_PER_SEC));
+  // 애니메이션 속도: 픽셀/초 기준 (120px/s 고정)
+  const duration = Math.min(TICKER_MAX_DURATION,
+                   Math.max(TICKER_MIN_DURATION, setWidth / 120));
   track.style.animationDuration = `${duration}s`;
 
-  // Reflow 트릭 → 진행 중이던 애니메이션을 즉시 재시작
-  track.style.animation = 'none';
-  void track.offsetHeight;          // reflow 강제 트리거
+  // 애니메이션 재시작
+  void track.offsetWidth;
   track.style.animation = '';
 
   // 클릭 이벤트 위임

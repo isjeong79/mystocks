@@ -47,9 +47,9 @@
 
 /* 실제 스크롤 트랙 (콘텐츠 2벌 = seamless loop) */
 #news-ticker-track {
-  display: flex;            /* inline-flex → flex: shrink 없이 전체 너비 확보 */
+  --set-width: 9999px;      /* JS가 실측 픽셀값으로 덮어씀 */
+  display: flex;
   align-items: center;
-  width: max-content;       /* 콘텐츠 전체 너비 (압축 방지 핵심) */
   white-space: nowrap;
   animation: ticker-scroll 60s linear infinite;
   will-change: transform;
@@ -61,17 +61,18 @@
   animation-play-state: paused;
 }
 
-/* 각 세트가 flex shrink 되지 않도록 */
+/* 각 세트: shrink 없이 한 줄로 나열 */
 .ticker-set {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
-/* 콘텐츠 2벌을 나란히 → translateX(-50%)로 seamless loop */
+/* translateX에 JS가 측정한 실제 픽셀 너비 사용 → 겹침 완전 방지 */
 @keyframes ticker-scroll {
   0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  100% { transform: translateX(calc(-1 * var(--set-width))); }
 }
 
 /* 뉴스 아이템 */
