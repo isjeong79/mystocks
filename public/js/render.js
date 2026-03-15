@@ -24,7 +24,7 @@ export function renderWatchlist(watchlist) {
 
   // 추가 카드
   const add = document.createElement('div');
-  add.className = 'stock-card add-card';
+  add.className = 'stock-card add-card card-entering';
   add.onclick = _openModal;
   add.innerHTML = `<div class="add-icon">＋</div><div class="add-label">종목 추가</div>`;
   grid.appendChild(add);

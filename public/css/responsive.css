@@ -22,4 +22,7 @@
     margin: 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* 바텀시트 열기/닫기: 키보드 속도에 맞춘 280ms */
+  #modal-overlay.open  #modal { animation: sheet-in  0.28s cubic-bezier(0, 0, 0.2, 1); }
+  #modal-overlay.closing #modal { animation: sheet-out 0.28s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }

@@ -56,13 +56,14 @@ export function closeModal() {
   document.getElementById('search-input').blur();
   overlay.classList.add('closing');
   overlay.classList.remove('open');
+  const delay = window.innerWidth <= 500 ? 280 : 180;
   setTimeout(() => {
     overlay.classList.remove('closing');
     document.getElementById('modal').style.marginBottom = '';
     document.getElementById('search-input').value = '';
     document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, 180);
+  }, delay);
 }
 
 function setTab(tab) {

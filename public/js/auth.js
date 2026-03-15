@@ -66,7 +66,7 @@ function _setLoggedIn(user) {
   document.getElementById('btn-logout').style.display = '';
   document.getElementById('btn-open-auth').style.display = 'none';
   document.getElementById('update-section').style.display = user.username === '쑤' ? '' : 'none';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 350);
   _reconnectWS();
 }
 
