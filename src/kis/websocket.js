@@ -7,6 +7,7 @@ const state     = require('../state');
 const broadcast = require('../broadcast');
 
 let kisWs = null;
+let _h0stasp0Logged = false; // H0STASP0 개별종목 필드 인덱스 확인용 1회 디버그 로그
 
 function subMsg(trId, trKey) {
   return JSON.stringify({
@@ -128,8 +129,12 @@ function connectKis(getWatchlistItems) {
         broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
       } else if (state.stocks[code]) {
         // 개별종목 호가 — 동시호가 구간의 예상체결가 사용
-        // KIS H0STASP0: f[54]=예상체결가, f[56]=예상체결대비부호, f[55]=예상체결대비
-        // ※ 예상체결가가 0이면 아직 미확정이므로 무시
+        // ※ KIS H0STASP0 필드 인덱스: 실제 수신 데이터로 검증 필요 (아래 로그 참조)
+        if (f.length > 10 && !_h0stasp0Logged) {
+          _h0stasp0Logged = true;
+          console.log(`[KIS WS H0STASP0 DEBUG] ${code} 전체필드(${f.length}개):`, f.slice(0, 60));
+        }
+        // f[54]: 예상체결가 (검증 후 인덱스 수정 필요)
         const price = parseFloat(f[54]);
         if (!price || isNaN(price)) return;
         const sign       = f[56] ?? '3';

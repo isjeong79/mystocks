@@ -277,8 +277,9 @@ async function main() {
         await fetchKisIndexPrices().catch(() => {});
       }
 
-      // 종목: open/pre/auction→5분, after→10분
-      const interval = ds === 'after' ? 10 : 5;
+      // 종목: 동시호가→1분, 정규장/장전→5분, 시간외단일가→10분
+      const interval = (ds === 'opening_auction' || ds === 'closing_auction') ? 1
+                     : ds === 'after' ? 10 : 5;
       if (min % interval === 0) {
         await fetchKisStockPrices(watchlist.getWatchlistItems()).catch(() => {});
       }

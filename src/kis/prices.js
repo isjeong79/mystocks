@@ -2,12 +2,16 @@ const axios = require('axios');
 const { APP_KEY, APP_SECRET, REST_BASE } = require('../config');
 const { getAccessToken } = require('./auth');
 const { getUsMarketSession, SESSION_MARKET_MAP } = require('./session');
+const { getDomesticStatus } = require('../market/status');
 const { signToDir, delay, getKstNow } = require('../utils');
 const state     = require('../state');
 const broadcast = require('../broadcast');
 
 async function fetchKisStockPrices(watchlistItems) {
   const accessToken = getAccessToken();
+  const dsStatus    = getDomesticStatus().status;
+  const isAuction   = dsStatus === 'opening_auction' || dsStatus === 'closing_auction';
+
   for (const item of watchlistItems.filter(w => w.type === 'domestic')) {
     try {
       const res = await axios.get(
@@ -26,9 +30,17 @@ async function fetchKisStockPrices(watchlistItems) {
       );
       const out = res.data?.output;
       if (out) {
-        const price = parseFloat(out.stck_prpr), sign = out.prdy_vrss_sign;
-        const change = parseFloat(out.prdy_vrss), changeRate = parseFloat(out.prdy_ctrt);
-        const dir    = signToDir(sign);
+        // 동시호가 구간: stck_prpr(현재가)가 0일 수 있으므로 antc_cntg_prpr(예상체결가) 우선 사용
+        const rawPrice = (isAuction && parseFloat(out.antc_cntg_prpr) > 0)
+          ? out.antc_cntg_prpr
+          : out.stck_prpr;
+        const price = parseFloat(rawPrice);
+        if (!price) { await delay(500); continue; }
+
+        const sign       = (isAuction && out.antc_cntg_vrss_sign) ? out.antc_cntg_vrss_sign : out.prdy_vrss_sign;
+        const change     = parseFloat((isAuction && out.antc_cntg_vrss)  ? out.antc_cntg_vrss  : out.prdy_vrss);
+        const changeRate = parseFloat((isAuction && out.antc_cntg_ctrt)  ? out.antc_cntg_ctrt  : out.prdy_ctrt);
+        const dir        = signToDir(sign);
         state.stocks[item.code] = { ...state.stocks[item.code], price, sign, change, changeRate, dir };
         broadcast.broadcast({ type: 'stock', code: item.code, price, sign, change, changeRate, dir });
       }
