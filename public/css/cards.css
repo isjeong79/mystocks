@@ -47,11 +47,11 @@
   background: none; border: none; color: var(--muted); cursor: pointer;
   font-size: 11px; width: 22px; height: 22px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: color 0.15s, background 0.15s, opacity 0.15s;
+  opacity: 0; transition: background 0.15s, opacity 0.15s;
   line-height: 1; -webkit-tap-highlight-color: transparent;
 }
 .stock-card:hover .remove-btn { opacity: 1; }
-.remove-btn:hover, .remove-btn:active { color: var(--up); background: rgba(248,113,113,0.12); }
+.remove-btn:hover, .remove-btn:active { background: rgba(255,255,255,0.08); }
 
 /* 모바일: 항상 표시 + 터치 영역 확대 */
 @media (hover: none) {
