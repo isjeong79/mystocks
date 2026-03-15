@@ -462,8 +462,11 @@ async function aggregateAndSave() {
     { newsId: 1, title: 1, source: 1, url: 1, track: 1, timestamp: 1 }
   ).sort({ timestamp: -1 }).limit(BROADCAST_MAX * 2).lean();
 
+  // DB에 이전 버전(decodeHtml 적용 전)으로 저장된 항목도 정규화
+  const normalized = recent.map(n => ({ ...n, title: decodeHtml(n.title) }));
+
   // 제목 prefix 중복 제거 후 상위 BROADCAST_MAX 건
-  return deduplicateByPrefix(recent, 'title')
+  return deduplicateByPrefix(normalized, 'title')
     .slice(0, BROADCAST_MAX);
 }
 
