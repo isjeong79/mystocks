@@ -46,9 +46,9 @@ const RSS = {
 };
 
 const RSS_TIMEOUT     = 10_000;
-const MAX_NEWS_AGE_MS = 4 * 60 * 60 * 1000;  // 4시간
+const MAX_NEWS_AGE_MS = 12 * 60 * 60 * 1000;  // 12시간 (4시간이면 오래된 RSS 기사 누락)
 const GLOBAL_MAX      = 12;                    // 번역 전 최대 해외 뉴스 수
-const DUP_PREFIX_LEN  = 15;                    // 중복 판정 prefix 길이 (자)
+const DUP_PREFIX_LEN  = 15;                    // 수집 내부 중복 판정 prefix 길이 (자)
 const BROADCAST_MAX   = 50;                    // 티커 브로드캐스트 최대 건수
 
 // 머니투데이 종합피드 경제/증권 키워드 필터 (비관련 뉴스 제외)
@@ -459,7 +459,8 @@ async function aggregateAndSave() {
 
   const normalized = recent.map(n => ({ ...n, title: decodeHtml(n.title) }));
 
-  return deduplicateByPrefix(normalized, 'title')
+  // 브로드캐스트용 dedup은 20자 기준 — 15자면 다른 기사도 과도하게 제거됨
+  return deduplicateByPrefix(normalized, 'title', 20)
     .slice(0, BROADCAST_MAX);
 }
 
