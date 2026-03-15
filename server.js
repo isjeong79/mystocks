@@ -245,11 +245,37 @@ async function main() {
       }
     }, 60 * 1000);
 
-    if (getApprovalKey()) {
-      startSessionMonitor(watchlist.getWatchlistItems);
-      connectKis(watchlist.getWatchlistItems);
-    } else {
-      console.warn('[KIS] approvalKey 없음 → WebSocket 연결 건너뜀');
+    // 국내 종목 REST 가격 5분마다 갱신 (WS 미연결·장전·장후 fallback)
+    setInterval(async () => {
+      if (getAccessToken() && isDomesticOpen()) {
+        await fetchKisStockPrices(watchlist.getWatchlistItems()).catch(() => {});
+      }
+    }, 5 * 60 * 1000);
+
+    // KIS WS 연결 (approvalKey 없으면 2분마다 재시도)
+    let _kisStarted = false;
+    const _tryConnectKis = () => {
+      if (_kisStarted) return;
+      if (getApprovalKey()) {
+        _kisStarted = true;
+        startSessionMonitor(watchlist.getWatchlistItems);
+        connectKis(watchlist.getWatchlistItems);
+      }
+    };
+    _tryConnectKis();
+    if (!_kisStarted) {
+      console.warn('[KIS] approvalKey 없음 → 2분마다 재시도');
+      const _kisRetry = setInterval(async () => {
+        if (_kisStarted) { clearInterval(_kisRetry); return; }
+        try {
+          await fetchApprovalKey();
+          console.log('[KIS] approvalKey 재발급 완료');
+        } catch (e) {
+          console.warn('[KIS] approvalKey 재시도 실패:', e.message); return;
+        }
+        _tryConnectKis();
+        if (_kisStarted) clearInterval(_kisRetry);
+      }, 2 * 60 * 1000);
     }
 
     // 5. 종목 DB 확인 (백그라운드)
