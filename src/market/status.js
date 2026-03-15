@@ -47,6 +47,12 @@ function getUsStatus() {
   const regClose   = dst ? 5*60     : 6*60;    // 05:00 or 06:00 KST (다음날)
   const afterClose = 9*60;                      // 09:00 KST
 
+  // 일요일 KST: NYSE는 일요일 거래 없음 (프리마켓·정규장 모두 없음)
+  // KST 일요일 17:00 = EDT 일요일 04:00, 22:30 = EDT 일요일 09:30 → 모두 휴장
+  if (dow === 0) {
+    return { status: 'closed', label: '휴장', color: 'flat' };
+  }
+
   // 토요일: 자정~장마감(05/06시)은 금요일 정규장 연속, 이후 주말 휴장
   if (dow === 6) {
     if (hm < regClose)   return { status: 'open',   label: '정규장', color: 'up'   };
@@ -54,10 +60,8 @@ function getUsStatus() {
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
-  // 일요일: 저녁 프리마켓 전까지 휴장
-  if (dow === 0) {
-    if (hm >= regOpen)  return { status: 'open', label: '정규장',   color: 'up'   };
-    if (hm >= preOpen)  return { status: 'pre',  label: '프리마켓', color: 'warn' };
+  // 월요일 자정~regClose: 직전날(일요일)에 장이 없으므로 휴장
+  if (dow === 1 && hm < regClose) {
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
@@ -66,7 +70,7 @@ function getUsStatus() {
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
-  // 평일 일반 로직
+  // 평일 일반 로직 (화~목 자정~05:00은 전날 정규장 연속)
   if (hm >= regOpen || hm < regClose)        return { status: 'open',  label: '정규장',   color: 'up'   };
   if (hm >= regClose && hm < afterClose)     return { status: 'after', label: '애프터',   color: 'warn' };
   if (hm >= preOpen)                         return { status: 'pre',   label: '프리마켓', color: 'warn' };
