@@ -36,18 +36,13 @@ h1 > span:not(#status) { flex: 1; }
 }
 
 #status {
-  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--muted); flex-shrink: 0;
+  display: inline-block; width: 28px; height: 28px; flex-shrink: 0;
+  object-fit: contain; opacity: 0.5;
   /* 그라디언트 상속 차단 */
   -webkit-text-fill-color: initial; background-clip: initial; -webkit-background-clip: initial;
 }
-#status.connected { background: var(--green); animation: pulse-dot 2.5s ease-in-out infinite; }
-#status.error     { background: var(--up); }
-
-@keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
-  50%       { box-shadow: 0 0 0 5px rgba(74,222,128,0); }
-}
+#status.connected { opacity: 1; }
+#status.error     { opacity: 0.3; filter: grayscale(1); }
 
 /* ── 섹션 헤더 ───────────────────────────────────────────────────────── */
 h2 {
