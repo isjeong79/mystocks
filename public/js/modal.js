@@ -59,7 +59,9 @@ export function closeModal() {
   const delay = window.innerWidth <= 500 ? 280 : 180;
   setTimeout(() => {
     overlay.classList.remove('closing');
-    document.getElementById('modal').style.marginBottom = '';
+    const m = document.getElementById('modal');
+    m.style.marginBottom = '';
+    m.style.maxHeight = '';
     document.getElementById('search-input').value = '';
     document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -73,7 +75,7 @@ function setTab(tab) {
   input.placeholder = tab === 'domestic' ? '종목명 또는 종목코드 검색' : '티커 또는 회사명 검색';
   input.value = '';
   document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
-  requestAnimationFrame(() => input.focus());
+  requestAnimationFrame(() => { input.focus(); _adjustForKeyboard(); });
 }
 
 function onSearchInput() {
@@ -92,6 +94,7 @@ async function _doSearch(q) {
     const res     = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${currentTab}`);
     const results = await res.json();
     _renderResults(results);
+    _adjustForKeyboard();
   } catch {
     document.getElementById('search-results').innerHTML = '<div class="search-hint">검색에 실패했습니다</div>';
   }
