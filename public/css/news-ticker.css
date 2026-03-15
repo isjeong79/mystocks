@@ -101,9 +101,6 @@
   font-size: 0.7rem;
   color: var(--text);
   line-height: 1.2;
-  max-width: 340px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

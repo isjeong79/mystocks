@@ -3,7 +3,7 @@
  *
  * Track 1 – 해외 거시/주도주  : Finnhub → 키워드 필터 → Gemini 번역
  * Track 2 – 국내 거시          : Google News RSS (한국어)
- * Track 3 – 국내 공시/시황     : KIS OpenAPI 뉴스 제목 조회
+ * Track 3 – 국내 공시/시황     : 연합뉴스 경제 RSS
  *
  * 모든 Track은 Promise.allSettled로 병렬 실행 → 장애 격리
  * 수집 후 신규 항목만 MongoDB insert, 서버 메모리에 캐시하지 않음(Stateless)
@@ -14,18 +14,20 @@
 const axios     = require('axios');
 const RSSParser = require('rss-parser');
 const News      = require('../db/models/News');
-const { APP_KEY, APP_SECRET, REST_BASE } = require('../config');
-const { getAccessToken } = require('../kis/auth');
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
 const FINNHUB_BASE   = 'https://finnhub.io/api/v1';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL   = 'gemini-1.5-flash';
+const GEMINI_MODEL   = 'gemini-2.0-flash';   // 2026년 기준 무료 최신 모델
+// 한글 쿼리를 encodeURIComponent로 인코딩 (unescaped characters 에러 방지)
 const GOOGLE_NEWS_RSS =
-  'https://news.google.com/rss/search?q=코스피+OR+한국은행+OR+금융위+OR+기준금리+OR+코스닥&hl=ko&gl=KR&ceid=KR:ko';
+  'https://news.google.com/rss/search?q=' +
+  encodeURIComponent('코스피 OR 한국은행 OR 금융위 OR 기준금리 OR 코스닥') +
+  '&hl=ko&gl=KR&ceid=KR:ko';
+// Track 3: 연합뉴스 경제 RSS (KIS 뉴스 API 미지원으로 대체)
+const YONHAP_ECONOMY_RSS = 'https://www.yna.co.kr/rss/economy.xml';
 const RSS_TIMEOUT    = 10_000;   // ms
-const KIS_TIMEOUT    = 8_000;
 const GEMINI_TIMEOUT = 20_000;
 const MAX_NEWS_AGE_MS = 4 * 60 * 60 * 1000; // 4시간 이내 뉴스만 처리
 
@@ -143,67 +145,23 @@ function extractRssSource(title = '') {
   return m ? m[1].trim() : '';
 }
 
-// ── Track 3: KIS 국내 시황/공시 뉴스 ─────────────────────────────────────────
+// ── Track 3: 연합뉴스 경제 RSS (공시/시황) ───────────────────────────────────
 
 async function fetchDisclosureNews() {
-  const accessToken = getAccessToken();
-  if (!accessToken) throw new Error('KIS AccessToken 없음');
-
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-
-  const res = await axios.get(
-    `${REST_BASE}/uapi/domestic-stock/v1/quotations/news-title`,
-    {
-      headers: {
-        'content-type':  'application/json',
-        authorization:   `Bearer ${accessToken}`,
-        appkey:           APP_KEY,
-        appsecret:        APP_SECRET,
-        tr_id:            'HHKST03010100',
-        custtype:         'P',
-      },
-      params: {
-        FID_NEWS_OFER_ENTP_CODE: '',
-        FID_TITL_CNTT:           '',
-        FID_INPUT_DATE_1:        dateStr,
-        FID_INPUT_DATE_2:        dateStr,
-        FID_INPUT_HOUR_1:        '000000',
-        FID_INPUT_HOUR_2:        '235959',
-        FID_RANK_SORT_CLS_CODE:  '0',
-        FID_INPUT_ISCD:          '',
-      },
-      timeout: KIS_TIMEOUT,
-    }
-  );
-
-  if (res.data?.rt_cd !== '0') {
-    throw new Error(`KIS 뉴스 오류: ${res.data?.msg1}`);
-  }
-
+  const feed = await rssParser.parseURL(YONHAP_ECONOMY_RSS);
   const cutoff = new Date(Date.now() - MAX_NEWS_AGE_MS);
-  return (res.data?.output ?? [])
-    .map(item => {
-      const ts = parseKisDateTime(item.data_dt, item.data_tm);
-      return {
-        newsId:    `kis-${item.news_cntt_sno || item.data_dt + item.data_tm + item.news_titl?.slice(0, 10)}`,
-        title:     item.news_titl || '',
-        source:    item.news_ofer_entp_name || 'KIS',
-        url:       item.news_url || '',
-        track:     'disclosure',
-        timestamp: ts,
-      };
-    })
-    .filter(n => n.title.length > 3 && n.timestamp >= cutoff);
-}
 
-function parseKisDateTime(date = '', time = '') {
-  // date: YYYYMMDD, time: HHMMSS
-  if (date.length < 8) return new Date();
-  return new Date(
-    `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}T` +
-    `${time.slice(0,2)||'00'}:${time.slice(2,4)||'00'}:${time.slice(4,6)||'00'}+09:00`
-  );
+  return (feed.items ?? [])
+    .filter(item => new Date(item.pubDate) >= cutoff)
+    .map(item => ({
+      newsId:    `yna-${Buffer.from(item.link || item.title || '').toString('base64').slice(0, 40)}`,
+      title:     (item.title || '').trim(),
+      source:    '연합뉴스',
+      url:       item.link || '',
+      track:     'disclosure',
+      timestamp: new Date(item.pubDate || Date.now()),
+    }))
+    .filter(n => n.title.length > 5);
 }
 
 // ── 병합 및 DB 저장 ───────────────────────────────────────────────────────────
