@@ -116,10 +116,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── 정적 파일 (css/, js/) ──────────────────────────────────────────────
-  if (req.method === 'GET' && (pathname.startsWith('/css/') || pathname.startsWith('/js/'))) {
+  if (req.method === 'GET' && (pathname.startsWith('/css/') || pathname.startsWith('/js/') || pathname.startsWith('/img/'))) {
     const filePath = path.join(__dirname, 'public', pathname);
     const ext = path.extname(pathname);
-    const mime = ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript' : 'text/plain';
+    const mime = ext === '.css' ? 'text/css' : ext === '.js' ? 'application/javascript'
+      : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+      : ext === '.svg' ? 'image/svg+xml' : ext === '.webp' ? 'image/webp' : 'text/plain';
     fs.readFile(filePath, (err, data) => {
       if (err) { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { 'Content-Type': `${mime}; charset=utf-8` });

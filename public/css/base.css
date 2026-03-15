@@ -25,6 +25,11 @@ h1 {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 h1 > span:not(#status) { flex: 1; }
+#buddha-icon {
+  width: 28px; height: 28px; object-fit: contain;
+  flex-shrink: 0; margin-left: 2px;
+  filter: drop-shadow(0 0 4px rgba(251,191,36,0.5));
+}
 
 #status {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
