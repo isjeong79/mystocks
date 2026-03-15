@@ -425,23 +425,18 @@ async function aggregateAndSave() {
 
   if (all.length === 0) return [];
 
-  // newsId 기준 중복 제거
+  // newsId 기준 중복 제거만 수행 → title 중복 제거는 DB 저장 전에 하지 않음
+  // (title 중복 제거를 여기서 하면 DB에 쌓이는 기사 수가 급감)
   const unique = [...new Map(all.map(n => [n.newsId, n])).values()];
 
-  // cross-track 유사 제목 중복 제거 (앞 15자 일치)
-  const deduped = deduplicateByPrefix(
-    unique.sort((a, b) => b.timestamp - a.timestamp),
-    'title'
-  );
-
   // 번역 실패한 global 뉴스는 DB 저장 제외 (다음 주기 재시도)
-  const toSave = deduped.filter(n =>
+  const toSave = unique.filter(n =>
     n.track !== 'global' ||
     !n.headline_original ||
     n.title !== n.headline_original
   );
 
-  // insertMany ordered:false → 중복 키 무시, 나머지 삽입
+  // insertMany ordered:false → 중복 newsId 무시, 신규만 삽입
   try {
     const result = await News.insertMany(toSave, { ordered: false });
     console.log(`[News] DB insert: ${result.length}건 신규`);
@@ -454,18 +449,15 @@ async function aggregateAndSave() {
     }
   }
 
-  // DB에 누적된 최근 4시간 기사를 반환 → 매 사이클마다 새 기사가 쌓여 티커가 풍성해짐
-  // (현재 사이클 결과만 반환하면 RSS 업데이트 없을 시 같은 기사가 반복됨)
+  // DB 누적 기사 조회 → 여기서만 title 중복 제거 → 브로드캐스트
   const cutoffDate = new Date(Date.now() - MAX_NEWS_AGE_MS);
   const recent = await News.find(
     { timestamp: { $gte: cutoffDate } },
     { newsId: 1, title: 1, source: 1, url: 1, track: 1, timestamp: 1 }
-  ).sort({ timestamp: -1 }).limit(BROADCAST_MAX * 2).lean();
+  ).sort({ timestamp: -1 }).limit(BROADCAST_MAX * 3).lean();
 
-  // DB에 이전 버전(decodeHtml 적용 전)으로 저장된 항목도 정규화
   const normalized = recent.map(n => ({ ...n, title: decodeHtml(n.title) }));
 
-  // 제목 prefix 중복 제거 후 상위 BROADCAST_MAX 건
   return deduplicateByPrefix(normalized, 'title')
     .slice(0, BROADCAST_MAX);
 }
