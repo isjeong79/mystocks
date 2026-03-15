@@ -698,11 +698,16 @@
   }
 
   function openModal() {
+    // 항상 국내주식 탭으로 초기화
+    currentTab = 'domestic';
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'domestic'));
+    document.getElementById('search-input').placeholder = '종목명 또는 종목코드 검색';
+    document.getElementById('search-input').value = '';
+    document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
+
     document.getElementById('modal-overlay').classList.add('open');
-    // 모달 표시 직후 input 포커스 → 키보드 자동 표시
-    requestAnimationFrame(() => {
-      document.getElementById('search-input').focus();
-    });
+    // 사용자 제스처 컨텍스트 내 동기 호출 → iOS Safari 키보드 자동 표시
+    document.getElementById('search-input').focus();
   }
 
   function closeModal() {
@@ -711,6 +716,8 @@
     document.getElementById('modal').style.marginBottom = '';
     document.getElementById('search-input').value = '';
     document.getElementById('search-results').innerHTML = '<div class="search-hint">종목명이나 코드를 입력하세요</div>';
+    // 팝업 닫힌 후 메인화면 최상단으로 이동
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   document.getElementById('modal-overlay').addEventListener('click', e => {
