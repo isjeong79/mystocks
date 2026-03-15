@@ -19,7 +19,7 @@ const broadcast = require('./src/broadcast');
 const watchlist = require('./src/watchlist');
 const { handleAddStock, handleRemoveStock } = require('./src/handlers');
 const { fetchApprovalKey, fetchAccessToken, getApprovalKey, getAccessToken } = require('./src/kis/auth');
-const { fetchKisStockPrices, fetchInitialForeignPrices } = require('./src/kis/prices');
+const { fetchKisStockPrices, fetchInitialForeignPrices, fetchKisIndexPrices } = require('./src/kis/prices');
 const { connectKis, startSessionMonitor } = require('./src/kis/websocket');
 const { refreshCommodities } = require('./src/market/commodities');
 const { refreshForex }       = require('./src/market/forex');
@@ -180,7 +180,10 @@ async function main() {
 
     const allItems = watchlist.getWatchlistItems();
 
-    if (getAccessToken()) await fetchKisStockPrices(allItems);
+    if (getAccessToken()) {
+      await fetchKisStockPrices(allItems);
+      await fetchKisIndexPrices();
+    }
 
     await refreshHolidays();
     setInterval(refreshHolidays, 24 * 60 * 60 * 1000);

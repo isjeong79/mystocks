@@ -47,6 +47,9 @@ function connectKis(getWatchlistItems) {
       kisWs.send(subMsg('HDFSCNT0', trKey));
     });
     kisWs.send(subMsg('H0FOREXS', 'FX@USD'));
+    // 코스피/코스닥 지수 실시간 구독
+    kisWs.send(subMsg('H0STASP0', '0001'));
+    kisWs.send(subMsg('H0STASP0', '1001'));
   });
 
   kisWs.on('message', data => {
@@ -98,6 +101,20 @@ function connectKis(getWatchlistItems) {
       const dir = signToDir(sign);
       state.usEtfs[symbol] = { ...state.usEtfs[symbol], price, sign, change, changeRate, dir };
       broadcast.broadcast({ type: 'us_etf', symbol, name: state.usEtfs[symbol].name, price, change, changeRate, dir });
+
+    } else if (trId === 'H0STASP0') {
+      // 국내지수 실시간체결: f[0]=업종코드, f[2]=현재지수, f[3]=부호, f[4]=전일대비, f[5]=등락률
+      const code       = f[0];
+      const key        = code === '0001' ? 'KOSPI' : code === '1001' ? 'KOSDAQ' : null;
+      if (!key) return;
+      const price      = parseFloat(f[2]);
+      const sign       = f[3];
+      const change     = parseFloat(f[4]);
+      const changeRate = parseFloat(f[5]);
+      if (isNaN(price)) return;
+      const dir = signToDir(sign);
+      state.indices[key] = { price, change, changeRate, dir };
+      broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
 
     } else {
       console.log(`[KIS WS] 미처리 trId=${trId} fields[0-4]:`, f.slice(0, 5));

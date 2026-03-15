@@ -8,6 +8,10 @@ const state = {
     BRENT: { price: null, change: null, changeRate: null },
   },
   futures: { KOSPI_NIGHT: { price: null, change: null, changeRate: null } },
+  indices: {
+    KOSPI:  { price: null, change: null, changeRate: null, dir: 'flat' },
+    KOSDAQ: { price: null, change: null, changeRate: null, dir: 'flat' },
+  },
 };
 
 module.exports = state;

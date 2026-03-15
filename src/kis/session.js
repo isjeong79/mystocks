@@ -21,7 +21,11 @@ const SESSION_MARKET_MAP = {
   AMS: { night: ['D', 'AMS'], day: ['R', 'BAA'] },
 };
 
+const KIS_MARKET_CODES = new Set(['NAS', 'NYS', 'AMS']);
+
 function kisMarket(yahooExchange, symbol) {
+  // DB에서 이미 KIS 코드로 저장된 경우 그대로 사용 (DEFAULT_MARKET 덮어쓰기 방지)
+  if (KIS_MARKET_CODES.has(yahooExchange)) return yahooExchange;
   return YAHOO_TO_KIS_MARKET[yahooExchange] ?? DEFAULT_MARKET[symbol] ?? 'NAS';
 }
 

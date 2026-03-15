@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { APP_KEY, APP_SECRET, REST_BASE } = require('../config');
 const { getAccessToken } = require('./auth');
-const { signToDir, delay } = require('../utils');
+const { signToDir, delay, getKstNow } = require('../utils');
 const state     = require('../state');
 const broadcast = require('../broadcast');
 
@@ -81,4 +81,60 @@ async function fetchInitialForeignPrices(watchlistItems) {
   console.log('[KIS REST] 해외주식 초기가격 완료');
 }
 
-module.exports = { fetchKisStockPrices, fetchKisForeignPrice, fetchInitialForeignPrices };
+// ── 국내 지수 초기 조회 (KOSPI: 0001, KOSDAQ: 1001) ─────────────────────────
+async function fetchKisIndexPrices() {
+  const accessToken = getAccessToken();
+  if (!accessToken) return;
+
+  const targets = [
+    { code: '0001', key: 'KOSPI'  },
+    { code: '1001', key: 'KOSDAQ' },
+  ];
+
+  for (const { code, key } of targets) {
+    try {
+      const res = await axios.get(
+        `${REST_BASE}/uapi/domestic-stock/v1/quotations/inquire-index-price`,
+        {
+          headers: {
+            'content-type': 'application/json',
+            authorization:  `Bearer ${accessToken}`,
+            appkey:          APP_KEY,
+            appsecret:       APP_SECRET,
+            tr_id:           'FHKUP03500100',
+            custtype:        'P',
+          },
+          params: {
+            FID_COND_MRKT_DIV_CODE: 'U',
+            FID_INPUT_ISCD:         code,
+            FID_INPUT_DATE_1:       getKstNow().toISOString().slice(0, 10).replace(/-/g, ''),
+            FID_INPUT_DATE_2:       getKstNow().toISOString().slice(0, 10).replace(/-/g, ''),
+            FID_PERIOD_DIV_CODE:    'D',
+            FID_ORG_ADJ_PRC:        '0',
+          },
+          timeout: 8000,
+        }
+      );
+      if (res.data?.rt_cd !== '0') { console.warn(`[KIS REST] 지수 ${key} 오류:`, res.data?.msg1); continue; }
+
+      // output 또는 output1(객체) 모두 지원
+      const out = res.data?.output ?? res.data?.output1;
+      if (!out) continue;
+
+      const rawPrice = out.bstp_nmix_prpr ?? out.bstp_index_prpr ?? out.stck_prpr;
+      if (!rawPrice) continue;
+      const price      = parseFloat(rawPrice);
+      const change     = parseFloat(out.bstp_nmix_prdy_vrss ?? out.bstp_index_prdy_vrss ?? out.prdy_vrss ?? 0);
+      const changeRate = parseFloat(out.bstp_nmix_prdy_ctrt ?? out.bstp_index_prdy_ctrt ?? out.prdy_ctrt ?? 0);
+      const dir        = signToDir(out.prdy_vrss_sign);
+      state.indices[key] = { price, change, changeRate, dir };
+      broadcast.broadcast({ type: 'index', key, price, change, changeRate, dir });
+    } catch (e) {
+      console.error(`[KIS REST] 지수 ${key} 실패:`, e.message);
+    }
+    await delay(300);
+  }
+  console.log('[KIS REST] 국내지수 초기가격 완료');
+}
+
+module.exports = { fetchKisStockPrices, fetchKisForeignPrice, fetchInitialForeignPrices, fetchKisIndexPrices };
