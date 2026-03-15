@@ -83,9 +83,14 @@ async function fetchGlobalNews() {
   const candidateIds = sliced.map(item => `finnhub-${item.id}`);
   const existing = await News.find(
     { newsId: { $in: candidateIds } },
-    { newsId: 1, title: 1 }
+    { newsId: 1, title: 1, headline_original: 1 }
   ).lean();
-  const existingMap = new Map(existing.map(n => [n.newsId, n.title]));
+  // headline_original과 title이 같으면 번역 실패로 저장된 것 → 재번역 대상에 포함
+  const existingMap = new Map(
+    existing
+      .filter(n => n.headline_original && n.title !== n.headline_original)
+      .map(n => [n.newsId, n.title])
+  );
 
   const newItems = sliced.filter(item => !existingMap.has(`finnhub-${item.id}`));
 
@@ -148,18 +153,24 @@ async function translateWithGemini(items) {
       { timeout: GEMINI_TIMEOUT },
     );
     const raw   = res.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
-    const match = raw.match(/\[[\s\S]*?\]/);
-    if (!match) return items;
+    // greedy 매칭: 배열 전체를 정확히 캡처 (non-greedy *? 는 첫 ] 에서 잘림)
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) {
+      console.warn('[News] Gemini 응답 JSON 파싱 실패, 원문:\n', raw.slice(0, 200));
+      return items;
+    }
 
     const translated = JSON.parse(match[0]);
     if (!Array.isArray(translated)) return items;
 
     // id 기준으로 원본과 병합
     const map = new Map(translated.map(t => [String(t.id), t.headline_ko]));
-    return items.map(item => ({
+    const result = items.map(item => ({
       ...item,
       headline_ko: map.get(String(item.id)) || item.headline,
     }));
+    console.log(`[News] Gemini 번역 완료: ${result.filter(r => r.headline_ko !== r.headline).length}/${items.length}건`);
+    return result;
   } catch (e) {
     console.warn('[News] Gemini 번역 실패, 원문 사용:', e.message);
     return items;
