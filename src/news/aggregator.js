@@ -82,25 +82,44 @@ async function fetchGlobalNews() {
     .sort((a, b) => b.datetime - a.datetime)
     .slice(0, 5);
 
-  // DB에 이미 저장된 newsId 확인 → 신규 항목만 Gemini 번역
-  // ※ 단순 Map 사용: DB에 있으면 무조건 캐시 재사용 (복잡한 필터는 쿨다운 우회 버그 원인)
+  // DB 조회: 이미 저장된 항목 확인
   const candidateIds = sliced.map(item => `finnhub-${item.id}`);
   const existing = await News.find(
     { newsId: { $in: candidateIds } },
-    { newsId: 1, title: 1 }
+    { newsId: 1, title: 1, headline_original: 1 }
   ).lean();
-  const existingMap = new Map(existing.map(n => [n.newsId, n.title]));
 
-  const newItems = sliced.filter(item => !existingMap.has(`finnhub-${item.id}`));
+  // 번역 성공 항목만 캐시 재사용 (title !== headline_original)
+  // 번역 실패 항목(title === headline_original)은 쿨다운 해제 시 재번역 대상
+  const existingMap = new Map(
+    existing
+      .filter(n => !n.headline_original || n.title !== n.headline_original)
+      .map(n => [n.newsId, n.title])
+  );
+  const failedIds = new Set(
+    existing
+      .filter(n => n.headline_original && n.title === n.headline_original)
+      .map(n => n.newsId)
+  );
 
-  // 신규 항목만 Gemini 번역 (기존 항목은 DB 저장 title 재사용)
+  // 신규 항목 + 번역 실패 항목(쿨다운 해제 시만) → Gemini 번역 대상
+  const inCooldown = Date.now() < _geminiCooldownUntil;
+  const newItems = sliced.filter(item => {
+    const id = `finnhub-${item.id}`;
+    if (!existingMap.has(id) && !failedIds.has(id)) return true;  // 진짜 신규
+    if (failedIds.has(id) && !inCooldown) return true;            // 실패 재시도 (쿨다운 해제 시)
+    return false;
+  });
+
+  // Gemini 번역 (쿨다운 체크는 translateWithGemini 내부에서도 수행)
   const translated = newItems.length > 0
     ? await translateWithGemini(newItems)
     : [];
 
   return sliced.map(item => {
     const id = `finnhub-${item.id}`;
-    if (existingMap.has(id)) {
+    // 번역 성공 캐시: 바로 반환
+    if (existingMap.has(id) && !failedIds.has(id)) {
       return {
         newsId:             id,
         title:              existingMap.get(id),
@@ -111,6 +130,7 @@ async function fetchGlobalNews() {
         timestamp:          new Date(item.datetime * 1000),
       };
     }
+    // 신규 or 번역 실패 재시도: Gemini 결과 사용
     const t = translated.find(d => d.id === item.id) || item;
     return {
       newsId:             id,
