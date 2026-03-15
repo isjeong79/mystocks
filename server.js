@@ -26,6 +26,7 @@ const { refreshForex }       = require('./src/market/forex');
 const { connectEsignalNightFutures } = require('./src/futures/esignal');
 const { refreshHolidays }    = require('./src/holidays');
 const { getAllMarketStatus, isDomesticOpen } = require('./src/market/status');
+const { aggregateAndSave } = require('./src/news/aggregator');
 
 // ── JSON body 파서 ────────────────────────────────────────────────────────────
 function parseBody(req) {
@@ -127,6 +128,13 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': `${mime}; charset=utf-8` });
       res.end(data);
     });
+    return;
+  }
+
+  // ── Keep-alive ping (Render Sleep 방지) ──────────────────────────────────
+  if (req.method === 'GET' && pathname === '/ping') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('pong');
     return;
   }
 
@@ -237,6 +245,23 @@ async function main() {
 
     // 5. 종목 DB 확인 (백그라운드)
     ensureStocksLoaded().catch(e => console.error('[종목로더]', e.message));
+
+    // 6. 뉴스 수집: 서버 시작 후 30초 뒤 첫 실행, 이후 2분 주기
+    const runNewsAggregator = async () => {
+      try {
+        const items = await aggregateAndSave();
+        if (items.length > 0) {
+          broadcast.broadcast({ type: 'news_ticker', items });
+          console.log(`[News] 브로드캐스트: ${items.length}건`);
+        }
+      } catch (e) {
+        console.error('[News] 수집 오류:', e.message);
+      }
+    };
+    setTimeout(() => {
+      runNewsAggregator();
+      setInterval(runNewsAggregator, 2 * 60 * 1000); // 2분 주기
+    }, 30_000);
   });
 }
 

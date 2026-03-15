@@ -13,8 +13,19 @@
   <link rel="stylesheet" href="css/modal.css" />
   <link rel="stylesheet" href="css/market-float.css" />
   <link rel="stylesheet" href="css/responsive.css" />
+  <link rel="stylesheet" href="css/news-ticker.css" />
 </head>
 <body>
+
+<!-- ── 뉴스 전광판 ──────────────────────────────────────────────────── -->
+<div id="news-ticker" role="marquee" aria-label="실시간 뉴스">
+  <div class="ticker-badge">📰&nbsp;LIVE</div>
+  <div class="ticker-viewport">
+    <div id="news-ticker-track" aria-live="polite">
+      <span class="ticker-set"><span class="ticker-item ticker-loading">뉴스를 불러오는 중...</span></span>
+    </div>
+  </div>
+</div>
 
 <h1>
   <span id="status"></span>AFM 실시간 주식 대시보드<img src="img/buddha.png" id="buddha-icon" alt="" />

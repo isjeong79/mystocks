@@ -1,0 +1,144 @@
+/* ── 뉴스 전광판 ──────────────────────────────────────────────────────────── */
+
+#news-ticker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  height: 32px;
+  background: linear-gradient(90deg, rgba(14,21,32,0.98) 0%, rgba(20,29,43,0.95) 100%);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+/* 왼쪽 라벨 배지 */
+.ticker-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px 0 10px;
+  height: 100%;
+  background: var(--accent);
+  color: #050c18;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%);
+  padding-right: 18px;
+}
+
+/* 뷰포트 (overflow hidden으로 흐르는 영역 마스킹) */
+.ticker-viewport {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  position: relative;
+  /* 좌우 페이드 마스크 */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 3%, black 97%, transparent 100%);
+  mask-image:         linear-gradient(90deg, transparent 0%, black 3%, black 97%, transparent 100%);
+}
+
+/* 실제 스크롤 트랙 (콘텐츠 2벌 = seamless loop) */
+#news-ticker-track {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: ticker-scroll 60s linear infinite;
+  will-change: transform;
+  cursor: default;
+}
+
+/* hover → 일시정지 */
+#news-ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* 콘텐츠 2벌을 나란히 → translateX(-50%)로 seamless loop */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* 뉴스 아이템 */
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 32px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.15s;
+  text-decoration: none;
+}
+
+.ticker-item:hover {
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.ticker-track-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--accent);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.ticker-source {
+  font-size: 0.62rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.ticker-title {
+  font-size: 0.7rem;
+  color: var(--text);
+  line-height: 1.2;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticker-time {
+  font-size: 0.58rem;
+  color: var(--muted);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.ticker-dot {
+  color: var(--accent);
+  opacity: 0.35;
+  font-size: 0.5rem;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.ticker-loading {
+  font-size: 0.68rem;
+  color: var(--muted);
+  padding: 0 20px;
+  animation: pulse-text 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1;   }
+}
+
+/* 모바일 */
+@media (max-width: 500px) {
+  #news-ticker { height: 28px; }
+  .ticker-badge { font-size: 0.6rem; padding: 0 10px 0 8px; padding-right: 16px; }
+  .ticker-title { font-size: 0.65rem; max-width: 220px; }
+  .ticker-track-label,
+  .ticker-time { display: none; }
+}

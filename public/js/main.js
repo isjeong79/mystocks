@@ -11,6 +11,7 @@ import * as Render     from './render.js';
 import * as Modal      from './modal.js';
 import * as MarketFloat from './market-float.js';
 import * as Auth       from './auth.js';
+import * as News       from './news.js';
 
 // ── WebSocket URL ──────────────────────────────────────────────────────────
 const WS_BASE = (() => {
@@ -82,6 +83,10 @@ function onMessage(msg) {
       updateStatus.textContent = msg.message.replace('[종목로더] ', '');
       break;
 
+    case 'news_ticker':
+      News.renderNewsTicker(msg.items);
+      break;
+
     case 'stock_update_done':
       btnUpdate.disabled = false;
       updateStatus.textContent = msg.success
@@ -116,6 +121,9 @@ Render.init({
 Modal.init({ sendWS: WS.send });
 
 MarketFloat.init();
+
+News.showTickerLoading();
+News.startKeepalive();
 
 Auth.init({
   reconnectWS: WS.reconnect,
