@@ -89,16 +89,19 @@ async function fetchGlobalNews() {
     { newsId: 1, title: 1, headline_original: 1 }
   ).lean();
 
-  // 번역 성공 항목만 캐시 재사용 (title !== headline_original)
-  // 번역 실패 항목(title === headline_original)은 쿨다운 해제 시 재번역 대상
+  // 번역 성공 항목만 캐시 재사용:
+  //   headline_original이 설정되어 있고 title과 다른 경우 = 실제 번역됨
   const existingMap = new Map(
     existing
-      .filter(n => !n.headline_original || n.title !== n.headline_original)
+      .filter(n => n.headline_original && n.title !== n.headline_original)
       .map(n => [n.newsId, n.title])
   );
+  // 재번역 대상:
+  //   1) headline_original 미설정 (headline_original 필드 추가 이전 저장 레코드)
+  //   2) title === headline_original (이전 사이클에서 번역 실패 후 저장)
   const failedIds = new Set(
     existing
-      .filter(n => n.headline_original && n.title === n.headline_original)
+      .filter(n => !n.headline_original || n.title === n.headline_original)
       .map(n => n.newsId)
   );
 
