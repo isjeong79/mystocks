@@ -35,14 +35,22 @@ h1 > span:not(#status) { flex: 1; }
   animation: buddha-glow 3s ease-in-out infinite;
 }
 
+#chart-icon {
+  width: 28px; height: 28px; object-fit: contain; flex-shrink: 0;
+}
+
 #status {
-  display: inline-block; width: 28px; height: 28px; flex-shrink: 0;
-  object-fit: contain; opacity: 0.5;
-  /* 그라디언트 상속 차단 */
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted); flex-shrink: 0;
   -webkit-text-fill-color: initial; background-clip: initial; -webkit-background-clip: initial;
 }
-#status.connected { opacity: 1; }
-#status.error     { opacity: 0.3; filter: grayscale(1); }
+#status.connected { background: var(--green); animation: pulse-dot 2.5s ease-in-out infinite; }
+#status.error     { background: var(--up); }
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
+  50%       { box-shadow: 0 0 0 4px rgba(74,222,128,0); }
+}
 
 /* ── 섹션 헤더 ───────────────────────────────────────────────────────── */
 h2 {
