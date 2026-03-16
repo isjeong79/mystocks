@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const { KIS_WS_URL } = require('../config');
-const { getApprovalKey } = require('./auth');
+const { getApprovalKey, fetchApprovalKey } = require('./auth');
 const { getUsMarketSession, foreignTrKey } = require('./session');
 const { getDomesticStatus } = require('../market/status');
 const { signToDir } = require('../utils');
@@ -8,6 +8,7 @@ const state     = require('../state');
 const broadcast = require('../broadcast');
 
 let kisWs = null;
+let _reissuingKey = false;
 
 function subMsg(trId, trKey) {
   return JSON.stringify({
@@ -68,7 +69,20 @@ function connectKis(getWatchlistItems) {
         if (trId === 'PINGPONG') {
           kisWs.send(text);
         } else if (json.body?.msg_cd === 'OPSP0011') {
-          console.warn('[KIS WS 거절]', trId, json.body.msg_cd, json.body.msg1);
+          const msg1 = json.body.msg1 ?? '';
+          if (msg1.includes('invalid') || msg1.includes('approval')) {
+            // 진짜 인증키 만료 — 재발급 후 재연결
+            console.warn('[KIS WS] 인증키 만료 감지, 재발급 시도...');
+            if (_reissuingKey) return;
+            _reissuingKey = true;
+            fetchApprovalKey()
+              .then(() => { if (kisWs?.readyState === WebSocket.OPEN) kisWs.close(); })
+              .catch(e => console.error('[KIS WS] 인증키 재발급 실패:', e.message))
+              .finally(() => { _reissuingKey = false; });
+          } else {
+            // 단순 권한/종목 오류 — 로그만 남기고 무시
+            console.warn('[KIS WS 거절]', trId, json.body.msg_cd, msg1);
+          }
           return;
         } else {
           console.log(`[KIS WS JSON] tr_id=${trId}`, JSON.stringify(json.body ?? json).substring(0, 250));
