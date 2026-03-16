@@ -187,9 +187,9 @@ async function main() {
   // 1. MongoDB 연결
   await connectDB();
 
-  // 2. 워치리스트 및 state 초기화
-  watchlist.initDefaultState();
+  // 2. 워치리스트 및 state 초기화 (loadAllWatchlists가 _globalItems를 리셋하므로 반드시 이후에 initDefaultState 호출)
   await watchlist.loadAllWatchlists();
+  watchlist.initDefaultState();
 
   // 3. 서버 시작
   server.listen(PORT, async () => {

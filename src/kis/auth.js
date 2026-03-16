@@ -33,7 +33,7 @@ async function fetchAccessToken(force = false) {
   await KisToken.findOneAndUpdate(
     { appKey: APP_KEY },
     { accessToken, expiresAt },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   console.log(`[KIS] accessToken 발급 완료 (만료: ${expiresAt.toLocaleString('ko-KR')})`);
 }

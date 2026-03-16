@@ -8,7 +8,6 @@
  */
 
 const WatchlistModel = require('./db/models/Watchlist');
-const { DEFAULT_MARKET } = require('./kis/session');
 const state = require('./state');
 
 // ── 전역 합집합 (KIS WS 구독 관리용) ─────────────────────────────────────────
@@ -64,7 +63,7 @@ async function addItemToUserWatchlist(userId, item) {
   await WatchlistModel.findOneAndUpdate(
     { userId, ...notExists },
     { $push: { items: item } },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   ).catch(() => null); // 이미 존재 시 upsert 충돌 → 정상, 무시
   _addToGlobal(item);
   return getWatchlistForUser(userId);
@@ -77,7 +76,7 @@ async function removeItemFromUserWatchlist(userId, { stockType, code, symbol }) 
     ? { items: { type: 'domestic', code } }
     : { items: { type: 'foreign', symbol } };
   const wl = await WatchlistModel.findOneAndUpdate(
-    { userId }, { $pull: pull }, { new: true }
+    { userId }, { $pull: pull }, { returnDocument: 'after' }
   );
   return wl ? wl.items : [];
 }

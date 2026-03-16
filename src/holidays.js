@@ -57,7 +57,7 @@ async function _loadKr(year) {
       await _model().findOneAndUpdate(
         { country: 'KR', year },
         { dates, loadedAt: new Date() },
-        { upsert: true }
+        { upsert: true, returnDocument: 'after' }
       );
       console.log(`[공휴일] KR ${year}년 API ${dates.length}건 저장`);
     }
@@ -97,7 +97,7 @@ async function _loadUs(year) {
       await _model().findOneAndUpdate(
         { country: 'US', year },
         { dates, loadedAt: new Date() },
-        { upsert: true }
+        { upsert: true, returnDocument: 'after' }
       );
       console.log(`[공휴일] US ${year}년 Finnhub ${dates.length}건 저장`);
     }
