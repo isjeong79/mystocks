@@ -5,26 +5,13 @@
   border-top: 1px solid rgba(56,189,248,0.6);
   box-shadow: 0 -6px 32px rgba(56,189,248,0.12), 0 -2px 8px rgba(0,0,0,0.6);
   padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
-  display: flex; align-items: center; gap: 8px;
-  transition: all 0.22s ease;
+  display: flex; align-items: center; justify-content: space-evenly; gap: 8px;
 }
-#market-float.minimized {
-  left: auto; right: 16px; bottom: 16px;
-  background: #0d1f38;
-  border: 2px solid #38bdf8; border-radius: 22px;
-  box-shadow: 0 4px 20px rgba(56,189,248,0.2);
-  padding: 8px 16px; width: auto; gap: 8px; cursor: pointer;
-}
-
-#mf-body { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
-#market-float.minimized #mf-body { display: none; }
-
-#mf-mini-label { display: none; font-size: 0.78rem; font-weight: 700; color: #38bdf8; letter-spacing: 0.02em; }
-#market-float.minimized #mf-mini-label { display: block; }
 
 /* 상태 항목 뱃지 */
 .mf-item {
-  display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 0.78rem;
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 6px; white-space: nowrap; font-size: 0.78rem;
   padding: 6px 13px; border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);
   transition: background 0.25s, border-color 0.25s;
@@ -48,13 +35,3 @@
 .mf-dot.mf-warn   { background: var(--warn);   box-shadow: 0 0 5px rgba(251,146,60,0.7); }
 .mf-dot.mf-accent { background: var(--accent); box-shadow: 0 0 5px rgba(56,189,248,0.7); }
 .mf-dot.mf-flat   { background: var(--muted); }
-
-/* 최소화 버튼 */
-#mf-toggle {
-  background: none; border: 1px solid var(--border); border-radius: 5px;
-  color: var(--muted); font-size: 0.68rem; padding: 3px 8px;
-  cursor: pointer; white-space: nowrap; flex-shrink: 0;
-  transition: color 0.15s, border-color 0.15s; -webkit-tap-highlight-color: transparent;
-}
-#mf-toggle:hover, #mf-toggle:active { color: var(--accent); border-color: var(--accent); }
-#market-float.minimized #mf-toggle  { display: none; }

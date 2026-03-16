@@ -5,7 +5,7 @@ body {
   color: var(--text);
   font-family: 'Inter', 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
   min-height: 100dvh;
-  padding: 20px 16px 84px;
+  padding: 20px 16px 110px;
 }
 
 /* 페이지 상단 배경 글로우 */
