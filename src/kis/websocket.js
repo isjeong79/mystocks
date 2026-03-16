@@ -40,6 +40,7 @@ function connectKis(getWatchlistItems) {
   kisWs = new WebSocket(KIS_WS_URL);
 
   kisWs.on('open', () => {
+    _reissuingKey = false; // 재연결 성공 시 플래그 해제
     console.log('[KIS WS] 연결');
     const items = getWatchlistItems();
     const ds = getDomesticStatus().status;
@@ -77,8 +78,7 @@ function connectKis(getWatchlistItems) {
             _reissuingKey = true;
             fetchApprovalKey()
               .then(() => { if (kisWs?.readyState === WebSocket.OPEN) kisWs.close(); })
-              .catch(e => console.error('[KIS WS] 인증키 재발급 실패:', e.message))
-              .finally(() => { _reissuingKey = false; });
+              .catch(e => { console.error('[KIS WS] 인증키 재발급 실패:', e.message); _reissuingKey = false; });
           } else {
             // 단순 권한/종목 오류 — 로그만 남기고 무시
             console.warn('[KIS WS 거절]', trId, json.body.msg_cd, msg1);
