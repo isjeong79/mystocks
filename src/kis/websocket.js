@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const { KIS_WS_URL } = require('../config');
-const { getApprovalKey, fetchApprovalKey } = require('./auth');
+const { getApprovalKey } = require('./auth');
 const { getUsMarketSession, foreignTrKey } = require('./session');
 const { getDomesticStatus } = require('../market/status');
 const { signToDir } = require('../utils');
@@ -8,7 +8,6 @@ const state     = require('../state');
 const broadcast = require('../broadcast');
 
 let kisWs = null;
-let _reissuingKey = false; // approvalKey 재발급 중 중복 호출 방지
 
 function subMsg(trId, trKey) {
   return JSON.stringify({
@@ -44,7 +43,6 @@ function connectKis(getWatchlistItems) {
     const items = getWatchlistItems();
     const ds = getDomesticStatus().status;
     // 구독 한도(40개) 방어: 시장 상태에 따라 종목당 TR 1개만 구독
-    // H0STASP0(호가)는 이 계정에서 지원 안 됨 → auction 구간도 H0STCNT0 사용, 예상체결가는 REST 폴링으로 처리
     const domTrId = (ds === 'pre') ? 'H1STCNT0' : 'H0STCNT0';
     console.log(`[KIS WS] 국내종목 구독 TR: ${domTrId} (상태: ${ds})`);
     items.filter(w => w.type === 'domestic').forEach(w => kisWs.send(subMsg(domTrId, w.code)));
@@ -53,8 +51,9 @@ function connectKis(getWatchlistItems) {
       console.log(`[KIS WS] 해외주식 구독: HDFSCNT0 ${trKey}`);
       kisWs.send(subMsg('HDFSCNT0', trKey));
     });
-    kisWs.send(subMsg('H0FOREXS', 'FX@USD'));
-    // 지수 실시간 WS 구독 제거 — H0STASP0 미지원 계정이므로 REST 1분 폴링으로 대체
+    // kisWs.send(subMsg('H0FOREXS', 'FX@USD'));   // 권한 확인 전 비활성화
+    // kisWs.send(subMsg('H0STASP0', '0001'));      // 권한 확인 전 비활성화
+    // kisWs.send(subMsg('H0STASP0', '1001'));      // 권한 확인 전 비활성화
   });
 
   kisWs.on('message', data => {
@@ -67,14 +66,8 @@ function connectKis(getWatchlistItems) {
         if (trId === 'PINGPONG') {
           kisWs.send(text);
         } else if (json.body?.msg_cd === 'OPSP0011') {
-          console.warn(`[KIS WS] OPSP0011 tr_id=${trId} msg="${json.body?.msg1}"`);
-          // approvalKey 만료 — 중복 재발급 방지 후 1회만 처리
-          if (_reissuingKey) return;
-          _reissuingKey = true;
-          fetchApprovalKey()
-            .then(() => { if (kisWs?.readyState === WebSocket.OPEN) kisWs.close(); })
-            .catch(e => console.error('[KIS WS] approvalKey 재발급 실패:', e.message))
-            .finally(() => { _reissuingKey = false; });
+          console.warn('[KIS WS 거절]', trId, json.body.msg_cd, json.body.msg1);
+          return;
         } else {
           console.log(`[KIS WS JSON] tr_id=${trId}`, JSON.stringify(json.body ?? json).substring(0, 250));
         }
@@ -95,9 +88,8 @@ function connectKis(getWatchlistItems) {
       broadcast.broadcast({ type: 'stock', code, price, sign, change, changeRate, dir });
 
     } else if (trId === 'H0FOREXS' || trId === 'H0FOREXS0') {
-      console.log(`[KIS WS] ${trId} 전체필드(${f.length}개):`, f.slice(0, 15));
       const rate = parseFloat(f[2]);
-      if (!rate) { console.warn(`[KIS WS] rate 파싱 실패 f[2]="${f[2]}"`); return; }
+      if (!rate) return;
       const prev       = state.forex.USDKRW.rate || rate;
       const change     = parseFloat((rate - prev).toFixed(2));
       const changeRate = parseFloat(((rate - prev) / prev * 100).toFixed(2));
@@ -116,9 +108,6 @@ function connectKis(getWatchlistItems) {
       const dir = signToDir(sign);
       state.usEtfs[symbol] = { ...state.usEtfs[symbol], price, sign, change, changeRate, dir };
       broadcast.broadcast({ type: 'us_etf', symbol, name: state.usEtfs[symbol].name, price, change, changeRate, dir });
-
-    } else if (trId === 'H0STASP0') {
-      // 현재 미구독 — 수신 시 무시 (계정 미지원)
 
     } else {
       console.log(`[KIS WS] 미처리 trId=${trId} fields[0-4]:`, f.slice(0, 5));
@@ -146,7 +135,7 @@ function startSessionMonitor(getWatchlistItems) {
       if (kisWs?.readyState === WebSocket.OPEN) kisWs.close();
       return;
     }
-    // 국내 시장 상태 전환 감시 (TR 변경 필요 구간: pre/auction/open 경계)
+    // 국내 시장 상태 전환 감시 (pre↔open 경계에서 TR 변경)
     const domStatus = getDomesticStatus().status;
     if (_lastDomStatus !== domStatus) {
       console.log(`[세션전환] KR ${_lastDomStatus} → ${domStatus} | KIS WS 재연결`);
