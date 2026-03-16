@@ -43,7 +43,9 @@ function connectKis(getWatchlistItems) {
     const items = getWatchlistItems();
     const ds = getDomesticStatus().status;
     // 구독 한도(40개) 방어: 시장 상태에 따라 종목당 TR 1개만 구독
-    const domTrId = (ds === 'pre') ? 'H1STCNT0' : 'H0STCNT0';
+    let domTrId = 'H0STCNT0';
+    if (ds === 'pre') domTrId = 'H1STCNT0';
+    else if (ds === 'opening_auction' || ds === 'closing_auction') domTrId = 'H0STASP0';
     console.log(`[KIS WS] 국내종목 구독 TR: ${domTrId} (상태: ${ds})`);
     items.filter(w => w.type === 'domestic').forEach(w => kisWs.send(subMsg(domTrId, w.code)));
     items.filter(w => w.type === 'foreign').forEach(w => {
@@ -108,6 +110,18 @@ function connectKis(getWatchlistItems) {
       const dir = signToDir(sign);
       state.usEtfs[symbol] = { ...state.usEtfs[symbol], price, sign, change, changeRate, dir };
       broadcast.broadcast({ type: 'us_etf', symbol, name: state.usEtfs[symbol].name, price, change, changeRate, dir });
+
+    } else if (trId === 'H0STASP0') {
+      const code = f[0];
+      if (!state.stocks[code]) return;
+      const price = parseFloat(f[47]);
+      if (!price || isNaN(price)) return;
+      const sign       = f[51] ?? '3';
+      const change     = parseFloat(f[50] ?? 0);
+      const changeRate = parseFloat(f[52] ?? 0);
+      const dir        = signToDir(sign);
+      state.stocks[code] = { ...state.stocks[code], price, sign, change, changeRate, dir };
+      broadcast.broadcast({ type: 'stock', code, price, sign, change, changeRate, dir });
 
     } else {
       console.log(`[KIS WS] 미처리 trId=${trId} fields[0-4]:`, f.slice(0, 5));
