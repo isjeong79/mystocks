@@ -55,6 +55,7 @@ function getUsStatus() {
   const hm  = kst.getHours() * 60 + kst.getMinutes();
   const dst = isDstActive();
 
+  const dayOpen    = 9*60;                       // 09:00 KST (KIS 주간거래 시작)
   const preOpen    = dst ? 17*60    : 18*60;    // 17:00 or 18:00 KST
   const regOpen    = dst ? 22*60+30 : 23*60+30; // 22:30 or 23:30 KST
   const regClose   = dst ? 5*60     : 6*60;     // 05:00 or 06:00 KST (다음날)
@@ -76,8 +77,11 @@ function getUsStatus() {
     return { status: 'closed', label: '휴장', color: 'flat' };
   }
 
-  // 월요일 자정~preOpen: 일요일 장 없으므로 프리마켓 시작 전까지 전구간 휴장
-  if (dow === 1 && hm < preOpen) return { status: 'closed', label: '휴장', color: 'flat' };
+  // 월요일 자정~preOpen: 일요일 장 없으므로 주간거래 전까지 휴장, 이후 주간거래
+  if (dow === 1) {
+    if (hm < dayOpen) return { status: 'closed', label: '휴장',   color: 'flat'   };
+    if (hm < preOpen) return { status: 'day',    label: '주간거래', color: 'accent' };
+  }
 
   // 금요일 오후 09:00~preOpen: 주말 전 휴장 구간
   if (dow === 5 && hm >= afterClose && hm < preOpen) return { status: 'closed', label: '휴장', color: 'flat' };
@@ -89,6 +93,7 @@ function getUsStatus() {
   if (hm >= regOpen || hm < regClose)    return { status: 'open',  label: '정규장',   color: 'up'   };
   if (hm >= regClose && hm < afterClose) return { status: 'after', label: '애프터',   color: 'warn' };
   if (hm >= preOpen)                     return { status: 'pre',   label: '프리마켓', color: 'warn' };
+  if (hm >= dayOpen && hm < preOpen)     return { status: 'day',   label: '주간거래', color: 'accent' };
   return { status: 'closed', label: '휴장', color: 'flat' };
 }
 
