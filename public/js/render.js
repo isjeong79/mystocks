@@ -36,6 +36,7 @@ export function createCard(item) {
   const div   = document.createElement('div');
 
   div.className    = 'stock-card card-entering';
+  setTimeout(() => div.classList.remove('card-entering'), 350);
   div.id           = isKRW ? `card-d-${item.code}` : `card-f-${item.symbol}`;
   div.dataset.type = item.type;
   div.dataset.id   = isKRW ? item.code : item.symbol;
