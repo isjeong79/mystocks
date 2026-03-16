@@ -1,7 +1,14 @@
-/* ── 태블릿 (501px ~ 900px): 3컬럼 고정, 폰트/패딩은 기본값 유지 ─── */
+/* ── 태블릿 (501px ~ 900px): 3컬럼 + 뷰포트 비례 폰트 확대 ──────── */
+/* html font-size를 vw 기반으로 키우면 rem 단위 폰트 전체가 자동 비례 확대 */
+/* 501px→17px / 768px→22px / 900px→24px(max) */
 @media (min-width: 501px) and (max-width: 900px) {
+  html { font-size: clamp(16px, calc(8px + 1.8vw), 24px); }
+
   .stock-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .info-grid  { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  .stock-card, .add-card { padding: 10px 12px; }
+  .info-card  { padding: 10px 16px; }
 }
 
 /* ── 스마트폰 (≤500px) ────────────────────────────────────────────── */
