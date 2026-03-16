@@ -69,7 +69,6 @@ export function updateStockCard({ code, price, change, changeRate, dir }) {
   priceEl.textContent  = fmtKRW(price);
   changeEl.textContent = fmtChange(change, changeRate, dir, true);
   setClass(priceEl, dir); setClass(changeEl, dir);
-  flashIfChanged(card, dir, `d-${code}`, price);
 }
 
 // ── 해외 종목 ─────────────────────────────────────────────────────────────
@@ -81,7 +80,6 @@ export function updateEtfCard({ symbol, price, change, changeRate, dir }) {
   priceEl.textContent  = fmtUSD(price);
   changeEl.textContent = fmtChange(change, changeRate, dir, false);
   setClass(priceEl, dir); setClass(changeEl, dir);
-  flashIfChanged(card, dir, `f-${symbol}`, price);
 }
 
 // ── 원자재 ────────────────────────────────────────────────────────────────

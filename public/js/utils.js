@@ -47,10 +47,12 @@ export function setClass(el, dir) {
   el.classList.add(dir === 'up' ? 'up' : dir === 'down' ? 'down' : 'flat');
 }
 
-// 값이 바뀐 경우에만 플래시 (불필요한 애니메이션 방지)
+// 값이 바뀐 경우에만 플래시 — tick 방향(이전값 대비 상승/하락) 기준
 const _prev = {};
 export function flashIfChanged(el, dir, key, newVal) {
-  if (_prev[key] === newVal) return;
+  const prev = _prev[key];
   _prev[key] = newVal;
-  flashEl(el, dir);
+  if (prev === undefined || prev === newVal) return;
+  const tickDir = newVal > prev ? 'up' : 'down';
+  flashEl(el, tickDir);
 }
