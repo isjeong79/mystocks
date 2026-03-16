@@ -1,16 +1,7 @@
-/* ── 태블릿 (501px ~ 900px): 스마트폰과 동일한 3컬럼 비율 ─────────── */
+/* ── 태블릿 (501px ~ 900px): 3컬럼 고정, 폰트/패딩은 기본값 유지 ─── */
 @media (min-width: 501px) and (max-width: 900px) {
-  body { padding: 16px 14px 110px; }
-
-  .stock-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .info-grid  { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-
-  .stock-card, .add-card { padding: 7px 9px; min-height: 0; border-radius: 10px; }
-  .info-card  { padding: 7px 13px; border-radius: 10px; }
-
-  .stock-price, .info-value { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .stock-change, .info-sub  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .stock-name, .info-label, .stock-change, .info-sub { font-size: 0.67rem; }
+  .stock-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .info-grid  { grid-template-columns: repeat(3, 1fr); gap: 10px; }
 }
 
 /* ── 스마트폰 (≤500px) ────────────────────────────────────────────── */
