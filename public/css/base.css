@@ -78,8 +78,8 @@ h2::before {
 .down { color: var(--down); }
 .flat { color: var(--muted); }
 
-/* ── 플래시 애니메이션 ───────────────────────────────────────────────── */
-@keyframes flash-up   { 0% { background: rgba(248,113,113,0.18); } 100% { background: transparent; } }
-@keyframes flash-down { 0% { background: rgba(96,165,250,0.18);  } 100% { background: transparent; } }
-.flash-up   { animation: flash-up   0.7s ease-out; }
-.flash-down { animation: flash-down 0.7s ease-out; }
+/* ── 플래시 애니메이션 (상승=빨강, 하락=파랑) ────────────────────────── */
+@keyframes flash-up   { 0%,100% { background: transparent; } 35% { background: rgba(248,113,113,0.45); } }
+@keyframes flash-down { 0%,100% { background: transparent; } 35% { background: rgba(96,165,250,0.45);  } }
+.flash-up   { animation: flash-up   0.6s ease-out; }
+.flash-down { animation: flash-down 0.6s ease-out; }
